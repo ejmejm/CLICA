@@ -30,7 +30,7 @@ KEY_DOWN_TOKEN = format_command_token('key_down')
 CURSOR_TOKEN = format_command_token('cursor')
 RUN_CODE_TOKEN = format_command_token('run_code')
 
-COMMAND_TOKENS = [
+COMMAND_TOKENS = set([
   KEY_BACKSPACE_TOKEN,
   KEY_ENTER_TOKEN,
   KEY_LEFT_TOKEN,
@@ -38,7 +38,7 @@ COMMAND_TOKENS = [
   KEY_UP_TOKEN,
   KEY_DOWN_TOKEN,
   RUN_CODE_TOKEN,
-]
+])
 
 # Header special tokens
 HEADER_INSTRUCTION_TOKEN = format_special_token('instruction')
@@ -46,14 +46,14 @@ HEADER_CODE_TOKEN = format_special_token('code')
 HEADER_EXEC_OUTPUT_TOKEN = format_special_token('execution_output')
 HEADER_TEXT_QUEUE_TOKEN = format_special_token('text_queue')
 
-HEADER_TOKENS = [
+HEADER_TOKENS = set([
   HEADER_INSTRUCTION_TOKEN,
   HEADER_CODE_TOKEN,
   HEADER_EXEC_OUTPUT_TOKEN,
   HEADER_TEXT_QUEUE_TOKEN,
-]
+])
 
-ENV_SPECIAL_TOKENS = COMMAND_TOKENS + HEADER_TOKENS + [CURSOR_TOKEN]
+ENV_SPECIAL_TOKENS = COMMAND_TOKENS.union(HEADER_TOKENS).union(set([CURSOR_TOKEN]))
 
 
 class InteractivePythonEnv(gym.Env):
@@ -205,7 +205,23 @@ class InteractivePythonEnv(gym.Env):
         + [self._vocab[HEADER_TEXT_QUEUE_TOKEN]] + self._text_queue
   
     return obs_token_ids
-
+  
+  def get_dict_obs(self, include_cursor: bool = True):
+    """
+    Get the observation as a dictionary, with keys for:
+      the instruction, code, execution output, and text queue.
+    """
+    code = self._code
+    if include_cursor:
+      code = code[:self._cursor_pos] + [self._vocab[CURSOR_TOKEN]] + code[self._cursor_pos:]
+    
+    return {
+      'instruction': self._instruction,
+      'code': code,
+      'exec_output': self._exec_output,
+      'text_queue': self._text_queue,
+    }
+    
   def render(self, mode: str = 'human'):
     """
     Renders the current terminal screen.
