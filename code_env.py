@@ -1,6 +1,9 @@
 from io import StringIO
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 from typing import Dict, List, Tuple
+import sys
+import warnings
+import traceback
 
 import gymnasium as gym
 import torch
@@ -162,10 +165,10 @@ class InteractivePythonEnv(gym.Env):
       self._cursor_pos = min(len(self._code), self._cursor_pos + 1)
       
     elif command_token == KEY_UP_TOKEN:
-      raise NotImplementedError(f'{KEY_UP_TOKEN} token not implemented')
+      warnings.warn(f'{KEY_UP_TOKEN} token not implemented')
     
     elif command_token == KEY_DOWN_TOKEN:
-      raise NotImplementedError(f'{KEY_DOWN_TOKEN} token not implemented')
+      warnings.warn(f'{KEY_DOWN_TOKEN} token not implemented')
     
     elif command_token == KEY_BACKSPACE_TOKEN:
       if self._cursor_pos > 0:
@@ -180,15 +183,21 @@ class InteractivePythonEnv(gym.Env):
 
   def _execute_code(self):
     """
-    Executes the code in the code buffer.
+    Executes the code in the code buffer and captures both stdout and the full stack trace if an error occurs.
     """
     code_text = self._tokenizer.decode(self._code, skip_special_tokens=True)
     
-    f = StringIO()
-    with redirect_stdout(f):
-      exec(code_text)
-  
-    self._exec_output = self._tokenizer.encode(f.getvalue())
+    stdout_capture = StringIO()
+    error_trace = ''
+    
+    with redirect_stdout(stdout_capture):
+        try:
+            exec(code_text)
+        except Exception:
+            error_trace = traceback.format_exc()
+    
+    output = stdout_capture.getvalue() + error_trace
+    self._exec_output = self._tokenizer.encode(output)
 
   def get_obs(self, include_cursor: bool = True) -> List[int]:
     """
@@ -233,6 +242,12 @@ class InteractivePythonEnv(gym.Env):
       raise ValueError(f'Invalid mode: {mode}')
 
     print(self.get_obs())
+    
+  def set_instruction(self, instruction: List[int]):
+    """
+    Sets the instruction to the given list of token ids.
+    """
+    self._instruction = instruction
 
 
 def add_and_init_special_token(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, token: str):

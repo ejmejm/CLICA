@@ -1,4 +1,5 @@
 import curses
+from curses import ascii
 import enum
 from typing import Callable, Optional, Union
 
@@ -22,6 +23,7 @@ from code_env import *
 
 
 KEY_CTRL_RIGHT_TOKEN = format_command_token('key_ctrl_right')
+KEY_CTRL_R_TOKEN = RUN_CODE_TOKEN
 
 SPECIAL_KEY_TO_TOKEN_MAP = {
   '\033[A': KEY_UP_TOKEN,
@@ -30,6 +32,7 @@ SPECIAL_KEY_TO_TOKEN_MAP = {
   '\033[D': KEY_LEFT_TOKEN,
   '\x7f': KEY_BACKSPACE_TOKEN,
   '\033[1;5C': KEY_CTRL_RIGHT_TOKEN,
+  ascii.ctrl('r'): KEY_CTRL_R_TOKEN,
 }
 
 
@@ -130,7 +133,6 @@ class InteractiveCLI():
         env_kwargs = env_kwargs or {}
         self.env = make_env(**env_kwargs)
         self.env.reset()
-        self.user_prompt = ''
         self.user_feedback = ''
         self.curr_reward = 0
         self.state = CLIState.MENU
@@ -148,21 +150,29 @@ class InteractiveCLI():
         elif self.state == CLIState.PROMPT:
             return {'ESC': '[ESC] menu'}
         elif self.state == CLIState.EXAMPLE:
-            return {'ESC': '[ESC] menu'}
+            return {
+                '^r': '[ctrl+r] run code',
+                '^KEY_RIGHT': '[ctrl+right] insert text',
+                'ESC': '[ESC] menu',
+            }
         return {}
 
     def _write_obs_to_screen(self, writer: LineWriter):
         prompt_header = "=" * 5 + " User Instruction " + "=" * 5
+        prompt_lines = self._get_env_instruction().splitlines()
         
         code_header = "=" * 5 + " Project Code " + "=" * 5
-        code_lines = self._get_env_code().splitlines()
+        code_lines = self._get_env_code(include_cursor=True).splitlines()
 
         text_queue_header = "=" * 5 + " Text Queue " + "=" * 5
         text_queue_lines = self._get_env_text_queue().splitlines()
 
+        exec_output_header = "=" * 5 + " Execution Output " + "=" * 5
+        exec_output_lines = self._get_env_exec_output().splitlines()
+
         ### Prompt text ###
         writer.write(prompt_header, curses.A_ITALIC)
-        writer.write(self.user_prompt or '')
+        writer.write(prompt_lines)
         writer.skip_lines(2)
         
         ### Code text ###
@@ -174,6 +184,11 @@ class InteractiveCLI():
         ### Text queue ###
         writer.write(text_queue_header, curses.A_ITALIC)
         writer.write(text_queue_lines)
+        writer.skip_lines(2)
+
+        ### Execution output ###
+        writer.write(exec_output_header, curses.A_ITALIC)
+        writer.write(exec_output_lines)
         
     def _write_command_menu_to_screen(self, writer: LineWriter):
         """Writes the command menu to the screen.
@@ -225,7 +240,7 @@ class InteractiveCLI():
         elif key in ('\x1b', '\x03'): # ESC, ctrl+c
             return True
         return False
-    
+
     def _render_prompt(self):
         """Renders the prompt editor to the terminal."""
         self.stdscr.clear()
@@ -238,6 +253,7 @@ class InteractiveCLI():
         curses.echo()
         self.user_prompt = self.stdscr.getstr(1, 0).decode('utf-8')
         curses.noecho()
+        
         self.state = CLIState.MENU
 
     def _get_env_code(self, include_cursor: bool = False):
@@ -251,6 +267,18 @@ class InteractiveCLI():
         dict_obs = self.env.get_dict_obs()
         text_queue = self.agent.tokenizer.decode(dict_obs['text_queue'])
         return text_queue
+
+    def _get_env_instruction(self):
+        """Returns the instruction from the environment as a string."""
+        dict_obs = self.env.get_dict_obs()
+        instruction = self.agent.tokenizer.decode(dict_obs['instruction'])
+        return instruction
+
+    def _get_env_exec_output(self):
+        """Returns the execution output from the environment as a string."""
+        dict_obs = self.env.get_dict_obs()
+        exec_output = self.agent.tokenizer.decode(dict_obs['exec_output'])
+        return exec_output
 
     def _render_example(self, insert_queue: str):
         """Renders the project code to the terminal."""
