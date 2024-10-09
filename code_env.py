@@ -199,6 +199,12 @@ class InteractivePythonEnv(gym.Env):
     output = stdout_capture.getvalue() + error_trace
     self._exec_output = self._tokenizer.encode(output)
 
+  def set_instruction(self, instruction: List[int]):
+    """
+    Sets the instruction to the given list of token ids.
+    """
+    self._instruction = instruction
+
   def get_obs(self, include_cursor: bool = True) -> List[int]:
     """
     Get the observation, which includes the current instruction, most recent execution output, 

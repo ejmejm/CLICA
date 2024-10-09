@@ -9,6 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from agent import BaseAgent, DummyAgent
 from code_env import *
+from problem_generation import generate_problem
 
 
 # # Map of escape sequences to special keys (e.g. '\033[A' -> 'up')
@@ -20,7 +21,6 @@ from code_env import *
 #        len(key) + COMMAND_CHARS_LEN < len(ESCAPE_SEQ_MAP[value]):
 #         continue
 #     ESCAPE_SEQ_MAP[value] = COMMAND_OPENER + key + COMMAND_CLOSER
-
 
 KEY_CTRL_RIGHT_TOKEN = format_command_token('key_ctrl_right')
 KEY_CTRL_R_TOKEN = RUN_CODE_TOKEN
@@ -48,12 +48,43 @@ def parse_escape_key(key: str) -> str:
     return SPECIAL_KEY_TO_TOKEN_MAP.get(key, key)
 
 
+def control_key(key: str) -> str:
+    """
+    Converts a string character to its corresponding control character.
+
+    Args:
+        key (str): A single character string representing the key to be converted.
+
+    Returns:
+        str: A string representing the corresponding control character.
+    """
+    return chr(ord(key.upper()) - 64)
+
+
+KEY_CTRL_P = control_key('p')
+KEY_CTRL_E = control_key('e')
+
+
+def alt_key(key: str) -> str:
+    """
+    Prefixes a string character with the escape character (\\x1b).
+
+    Args:
+        key (str): A single character string representing the key to be prefixed.
+
+    Returns:
+        str: A string representing the corresponding alt character.
+    """
+    return '\x1b' + key
+
+
 class CLIState(enum.Enum):
     """Enum for the different states of the CLI."""
     MENU = 0
     PROMPT = 1
     EXAMPLE = 2
     AGENT_TURN = 3
+    AUTO_PROMPT = 4
 
 
 class LineWriter():
@@ -229,6 +260,8 @@ class InteractiveCLI():
         key = self.stdscr.getkey()
         if key == 'p':
             self.state = CLIState.PROMPT
+        elif key == KEY_CTRL_P:
+            self.state = CLIState.AUTO_PROMPT
         elif key == 'e':
             self.state = CLIState.EXAMPLE
         elif key in ('+', '='):
@@ -254,6 +287,19 @@ class InteractiveCLI():
         self.user_prompt = self.stdscr.getstr(1, 0).decode('utf-8')
         curses.noecho()
         
+        self.env.set_instruction(self.agent.tokenizer.encode(self.user_prompt))
+
+        self.state = CLIState.MENU
+
+    def _handle_auto_prompt(self):
+        """Automatically generates a prompt for the user."""
+        from contextlib import redirect_stdout
+        import io
+        
+        with redirect_stdout(io.StringIO()):
+            problem = generate_problem()
+        
+        self.env.set_instruction(self.agent.tokenizer.encode(problem))
         self.state = CLIState.MENU
 
     def _get_env_code(self, include_cursor: bool = False):
@@ -413,6 +459,8 @@ class InteractiveCLI():
                     break
             elif self.state == CLIState.PROMPT:
                 self._handle_prompt()
+            elif self.state == CLIState.AUTO_PROMPT:
+                self._handle_auto_prompt()
             elif self.state == CLIState.EXAMPLE:
                 self._handle_example()
             elif self.state == CLIState.AGENT_TURN:
