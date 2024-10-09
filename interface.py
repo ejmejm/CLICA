@@ -110,10 +110,13 @@ class LineWriter():
         self.stdscr = stdscr
         self.reset()
 
+
     def reset(self):
         """Resets the line index to 0."""
         self.line_idx = 0
-        self.max_line_idx = self.stdscr.getmaxyx()[0] - 1
+        self.max_y, self.max_x = self.stdscr.getmaxyx()
+        self.max_line_idx = self.max_y - 1
+
 
     def write(self, string: Union[str, list[str]], *args, x: int = 0, **kwargs):
         """Writes a string or a list of strings to the terminal.
@@ -123,22 +126,35 @@ class LineWriter():
             x (int, optional): X coordinate. Defaults to 0.
         """
         if isinstance(string, str):
-            string = string.splitlines() # addstr() does not support multiline strings
+            string = string.splitlines()
 
         for line in string:
-            if self.line_idx < self.max_line_idx:
-                self.stdscr.addstr(self.line_idx, x, line, *args, **kwargs)
-            else:
-                self.stdscr.addstr(self.max_line_idx, x, '...', *args, **kwargs)
-            self.line_idx += 1
-            
+            remaining = line
+            while remaining:
+                space_left = self.max_x - x
+                to_write = remaining[:space_left]
+                if self.line_idx < self.max_line_idx:
+                    self.stdscr.addstr(self.line_idx, x, to_write, *args, **kwargs)
+                else:
+                    self.stdscr.addstr(self.max_line_idx, x, '...', *args, **kwargs)
+                    return
+                
+                self.line_idx += 1
+                remaining = remaining[space_left:]
+                x = 0  # Reset x for wrapped lines
+
+
     def skip_lines(self, n: int):
         """Skips n lines.
         
         Args:
             n (int): Number of lines to skip.
         """
-        self.line_idx += n
+        self.line_idx = min(self.line_idx + n, self.max_line_idx)
+
+
+    def get_current_line(self):
+        return self.line_idx
 
 
 class InteractiveCLI():
@@ -208,8 +224,8 @@ class InteractiveCLI():
         
         ### Code text ###
         writer.write(code_header, curses.A_ITALIC)
-        # TODO: Write warning if the code window is smaller than the env window
         writer.write(code_lines)
+        
         writer.skip_lines(2)
 
         ### Text queue ###
@@ -220,7 +236,7 @@ class InteractiveCLI():
         ### Execution output ###
         writer.write(exec_output_header, curses.A_ITALIC)
         writer.write(exec_output_lines)
-        
+
     def _write_command_menu_to_screen(self, writer: LineWriter):
         """Writes the command menu to the screen.
         
