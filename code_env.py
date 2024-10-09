@@ -86,12 +86,13 @@ class InteractivePythonEnv(gym.Env):
     super(InteractivePythonEnv, self).__init__()
 
     self._tokenizer = tokenizer
-    self._vocab = vocab
+    self._vocab = vocab # Maps token string to token id
     
     self._check_command_tokens_in_vocab()
     # Maps command token id to the token string
     self._rev_vocab = {v: k for k, v in self._vocab.items()}
     self._command_token_ids = set([self._vocab[token] for token in COMMAND_TOKENS])
+    self._new_line_ids = set(self._get_new_line_ids())
     
     self.reset()
 
@@ -139,6 +140,25 @@ class InteractivePythonEnv(gym.Env):
       self._text_queue.append(action)
 
     return self.get_obs(), 0, False, {}
+    
+  def _get_new_line_ids(self):
+    """Returns the token ids for all tokens that contain a newline character."""
+    ids = [i for token, i in self._vocab.items() if '\n' in token]
+    return ids
+
+  def _get_previous_new_line_idx(self):
+    """Returns the index of the last newline character prior to the cursor."""
+    for i in range(self._cursor_pos - 1, -1, -1):
+      if self._code[i] in self._new_line_ids:
+        return i
+    return -1
+  
+  def _get_next_new_line_idx(self):
+    """Returns the index of the next newline character after the cursor."""
+    for i in range(self._cursor_pos, len(self._code)):
+      if self._code[i] in self._new_line_ids:
+        return i
+    return -1
 
   def _apply_command(self, command_token_id: int):
     """
@@ -165,10 +185,12 @@ class InteractivePythonEnv(gym.Env):
       self._cursor_pos = min(len(self._code), self._cursor_pos + 1)
       
     elif command_token == KEY_UP_TOKEN:
-      warnings.warn(f'{KEY_UP_TOKEN} token not implemented')
+      new_line_idx = self._get_previous_new_line_idx()
+      self._cursor_pos = new_line_idx if new_line_idx != -1 else 0
     
     elif command_token == KEY_DOWN_TOKEN:
-      warnings.warn(f'{KEY_DOWN_TOKEN} token not implemented')
+      new_line_idx = self._get_next_new_line_idx()
+      self._cursor_pos = new_line_idx if new_line_idx != -1 else len(self._code)
     
     elif command_token == KEY_BACKSPACE_TOKEN:
       if self._cursor_pos > 0:

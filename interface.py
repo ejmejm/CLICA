@@ -419,10 +419,14 @@ class InteractiveCLI():
                 insert_queue += key
             
             # Otherwise it is just a normal command token
-            # This isn't a great solution, but for now we will ignore it if text is queued
+            # If there is text queued, this will auto commit that queued text
             elif len(insert_queue) > 0:
-                continue
-
+                queued_actions.extend(self.agent.tokenizer.encode(insert_queue))
+                queued_actions.append(self.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
+                queued_actions.append(self.agent.tokenizer.convert_tokens_to_ids(key))
+                insert_queue = ''
+            
+            # Otherwise it is just a normal command token
             else:
                 self.env.step(self.agent.tokenizer.convert_tokens_to_ids(key))
             
