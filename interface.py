@@ -1,6 +1,7 @@
 import curses
 from curses import ascii
 import enum
+import logging
 from typing import Callable, Optional, Union
 
 import hydra
@@ -309,11 +310,10 @@ class InteractiveCLI():
 
     def _handle_auto_prompt(self):
         """Automatically generates a prompt for the user."""
-        from contextlib import redirect_stdout
-        import io
-        
-        with redirect_stdout(io.StringIO()):
-            problem = generate_problem()
+        # Temporarily disable logging to prevent LiteLLM from printing to the console
+        logging.disable(logging.WARNING)
+        problem = generate_problem()
+        logging.disable(logging.NOTSET)
         
         self.env.set_instruction(self.agent.tokenizer.encode(problem))
         self.state = CLIState.MENU
