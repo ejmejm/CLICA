@@ -168,15 +168,14 @@ class InteractivePythonEnv(gym.Env):
       command_token_id (int): The id of the command token to apply.
     """
     command_token = self._rev_vocab[command_token_id]
-    
-    # Handle cases where there is text queued up
-    if len(self._text_queue) > 0:
-      if command_token == KEY_ENTER_TOKEN:
-        self._code = self._code[:self._cursor_pos] + self._text_queue + self._code[self._cursor_pos:]
-        self._cursor_pos += len(self._text_queue)
-        self._text_queue = []
-      else:
-        pass
+      
+    if command_token == KEY_ENTER_TOKEN:
+      self._code = self._code[:self._cursor_pos] + self._text_queue + self._code[self._cursor_pos:]
+      self._cursor_pos += len(self._text_queue)
+      self._text_queue = []
+      
+    elif len(self._text_queue) > 0:
+      pass
     
     elif command_token == KEY_LEFT_TOKEN:
       self._cursor_pos = max(0, self._cursor_pos - 1)

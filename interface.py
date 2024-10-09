@@ -117,9 +117,10 @@ class LineWriter():
         self.line_idx = 0
         self.max_y, self.max_x = self.stdscr.getmaxyx()
         self.max_line_idx = self.max_y - 1
+        self.curr_x = 0
 
 
-    def write(self, string: Union[str, list[str]], *args, x: int = 0, **kwargs):
+    def write(self, string: Union[str, list[str]], *args, x: Optional[int] = None, new_line: bool = True, **kwargs):
         """Writes a string or a list of strings to the terminal.
 
         Args:
@@ -128,21 +129,38 @@ class LineWriter():
         """
         if isinstance(string, str):
             string = string.splitlines()
+            
+        if x is not None:
+            self.curr_x = x
 
+        written = False
         for line in string:
+            if len(line) == 0:
+                self.line_idx += 1
+                self.curr_x = 0
+                continue
+            
             remaining = line
             while remaining:
-                space_left = self.max_x - x
+                written = True
+                space_left = self.max_x - self.curr_x
                 to_write = remaining[:space_left]
                 if self.line_idx < self.max_line_idx:
-                    self.stdscr.addstr(self.line_idx, x, to_write, *args, **kwargs)
+                    self.stdscr.addstr(self.line_idx, self.curr_x, to_write, *args, **kwargs)
                 else:
-                    self.stdscr.addstr(self.max_line_idx, x, '...', *args, **kwargs)
+                    self.stdscr.addstr(self.max_line_idx, self.curr_x, '...', *args, **kwargs)
+                    self.curr_x = 0
                     return
                 
-                self.line_idx += 1
                 remaining = remaining[space_left:]
-                x = 0  # Reset x for wrapped lines
+                
+                self.line_idx += 1
+                self.curr_x = 0  # Reset x for wrapped lines
+        
+        # Keep the cursor at the end of the line if new_line is false
+        if written and not new_line and len(to_write) < space_left:
+            self.line_idx -= 1
+            self.curr_x = len(to_write)
 
 
     def skip_lines(self, n: int):
@@ -152,7 +170,7 @@ class LineWriter():
             n (int): Number of lines to skip.
         """
         self.line_idx = min(self.line_idx + n, self.max_line_idx)
-
+        self.curr_x = 0
 
     def get_current_line(self):
         return self.line_idx
@@ -210,7 +228,7 @@ class InteractiveCLI():
         prompt_lines = self._get_env_instruction().splitlines()
         
         code_header = "=" * 5 + " Project Code " + "=" * 5
-        code_lines = self._get_env_code(include_cursor=True).splitlines()
+        code_lines = self._get_env_code(include_cursor=False).splitlines()
 
         text_queue_header = "=" * 5 + " Text Queue " + "=" * 5
         text_queue_lines = self._get_env_text_queue().splitlines()
@@ -226,7 +244,6 @@ class InteractiveCLI():
         ### Code text ###
         writer.write(code_header, curses.A_ITALIC)
         writer.write(code_lines)
-        
         writer.skip_lines(2)
 
         ### Text queue ###
@@ -345,15 +362,43 @@ class InteractiveCLI():
     def _render_example(self, insert_queue: str):
         """Renders the project code to the terminal."""
         self.stdscr.clear()
-
         writer = LineWriter(self.stdscr)
-        self._write_obs_to_screen(writer)
         
-        writer.write(insert_queue)
+        prompt_header = "=" * 5 + " User Instruction " + "=" * 5
+        prompt_lines = self._get_env_instruction().splitlines()
+        
+        code_header = "=" * 5 + " Project Code " + "=" * 5
+        code = self._get_env_code(include_cursor=True)
+        
+        # Insert current queue into code to make it easier to read
+        prior_code, post_code = code.split(CURSOR_TOKEN, 1)
+        prior_code = prior_code + insert_queue
+
+        exec_output_header = "=" * 5 + " Execution Output " + "=" * 5
+        exec_output_lines = self._get_env_exec_output().splitlines()
+
+        ### Prompt text ###
+        writer.write(prompt_header, curses.A_ITALIC)
+        writer.write(prompt_lines)
+        writer.skip_lines(2)
+        
+        ### Code text ###
+        writer.write(code_header, curses.A_ITALIC)
+        writer.write(prior_code, new_line=False)
+        cursor_y, cursor_x = self.stdscr.getyx()
+        writer.write(post_code)
+        
+        writer.skip_lines(2)
+
+        ### Execution output ###
+        writer.write(exec_output_header, curses.A_ITALIC)
+        writer.write(exec_output_lines)
+        
         writer.skip_lines(3)
         
         self._write_command_menu_to_screen(writer)
-
+    
+        self.stdscr.move(cursor_y, cursor_x)
         self.stdscr.refresh()
         
     def _query_and_parse_user_key(self):
