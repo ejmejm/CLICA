@@ -8,7 +8,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from agent import BaseAgent, DummyAgent
+from agent import BaseAgent, DummyAgent, TransformerAgent
 from code_env import *
 from database import ActionSource, ActionType, InteractionDatabase
 from problem_generation import generate_problem
@@ -569,16 +569,22 @@ class InteractiveCLI():
 def run_cli(config: DictConfig):
     config = OmegaConf.create(config)
     
-    model = AutoModelForCausalLM.from_pretrained('gpt2')
-    tokenizer = AutoTokenizer.from_pretrained('gpt2')
+    model = AutoModelForCausalLM.from_pretrained(
+        config.model_name,
+        torch_dtype = torch.bfloat16,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(config.get('tokenizer_name', config.model_name))
     
     # Add special tokens
     for token in ENV_SPECIAL_TOKENS:
       add_and_init_special_token(model, tokenizer, token)
       
+    device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+      
     vocab = tokenizer.get_vocab()
     
-    agent = DummyAgent(model, tokenizer, max_gen_length=8)
+    agent = TransformerAgent(model, tokenizer, max_gen_length=16) # DummyAgent(model, tokenizer, max_gen_length=8)
     cli = InteractiveCLI(
         agent = agent,
         make_env = InteractivePythonEnv,
