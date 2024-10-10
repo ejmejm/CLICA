@@ -1,7 +1,7 @@
 import os
 import logging
 import random
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from torch import nn
 from transformers import (
@@ -12,6 +12,9 @@ from transformers import (
 
 
 IGNORE_INDEX = -100
+
+
+RecurrentState = Any
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +35,7 @@ class BaseAgent(nn.Module):
         """Returns the EOS token id."""
         return self.tokenizer.eos_token
 
-    def get_action(self, *args) -> str:
+    def get_action(self, *args) -> Tuple[RecurrentState, int]:
         """Returns the model's action given the observation string.
 
         Returns:
@@ -65,9 +68,9 @@ class DummyAgent(BaseAgent):
         """Initialize the agent."""
         super().__init__(model, tokenizer, max_gen_length)
 
-    def get_action(self, obs: List[int]) -> int:
+    def get_action(self, state: RecurrentState, obs: List[int]) -> Tuple[RecurrentState, int]:
         """Returns a random action."""
-        return random.randint(0, len(self.tokenizer) - 1)
+        return (None, random.randint(0, len(self.tokenizer) - 1))
 
 
 if __name__ == '__main__':

@@ -369,6 +369,9 @@ class InteractiveCLI():
         
         code_header = "=" * 5 + " Project Code " + "=" * 5
         code = self._get_env_code(include_cursor=True)
+
+        text_queue_header = "=" * 5 + " Text Queue " + "=" * 5
+        text_queue_lines = self._get_env_text_queue().splitlines()
         
         # Insert current queue into code to make it easier to read
         prior_code, post_code = code.split(CURSOR_TOKEN, 1)
@@ -387,7 +390,11 @@ class InteractiveCLI():
         writer.write(prior_code, new_line=False)
         cursor_y, cursor_x = self.stdscr.getyx()
         writer.write(post_code)
-        
+        writer.skip_lines(2)
+
+        ### Text queue ###
+        writer.write(text_queue_header, curses.A_ITALIC)
+        writer.write(text_queue_lines)
         writer.skip_lines(2)
 
         ### Execution output ###
@@ -447,6 +454,8 @@ class InteractiveCLI():
                 # Enact all actions waiting in the queue before exiting
                 if len(insert_queue) > 0:
                     actions = self.agent.tokenizer.encode(insert_queue)
+                    queued_actions.append(self.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
+                    insert_queue = ''
                     for act in actions:
                         self.env.step(act)
                 break
@@ -476,31 +485,28 @@ class InteractiveCLI():
                 self.env.step(self.agent.tokenizer.convert_tokens_to_ids(key))
             
             self._render_example(insert_queue)
-            
-            # example_buffer['prompt'].append(self.user_prompt)
-            # example_buffer['code'].append(code)
-            # example_buffer['act'].append(key)
 
-        # Back to simplified key representations (e.g. 'KEY_UP')
         # self.agent.train_supervised(example_buffer)
+        # Back to simplified key representations (e.g. 'KEY_UP')
         self.stdscr.keypad(True)
         self.state = CLIState.MENU
 
     def _handle_agent_turn(self):
         """Handles the agent's turn, prompting it to generate text."""
         action = None
+        recurrent_state = None
         act_idx = 0
         stop_flag = False
         while act_idx < self.agent.max_gen_length and not stop_flag:
             self._render_menu()
-            actions = [self.agent.get_action(self.env.get_obs())]
-            for action in actions:
-                if action == self.agent.eos_token or act_idx >= self.agent.max_gen_length:
-                    stop_flag = True
-                    break
-                
-                self.env.step(action)
-                act_idx += 1
+            recurrent_state, action = self.agent.get_action(recurrent_state, self.env.get_obs())
+            # for action in actions:
+            if action == self.agent.eos_token or act_idx >= self.agent.max_gen_length:
+                stop_flag = True
+                break
+            
+            self.env.step(action)
+            act_idx += 1
 
         # for _ in range(self.agent.max_gen_length):
         #     self._render_menu()
