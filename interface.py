@@ -456,6 +456,7 @@ class InteractiveCLI():
         # example_buffer = {'prompt': [], 'code': [], 'act': []}
         insert_queue = ''
         queued_actions = []
+        render_queued = False
         
         self._render_example(insert_queue)
         
@@ -465,8 +466,11 @@ class InteractiveCLI():
             if len(queued_actions) > 0:
                 action_id = queued_actions.pop(0)
                 self._env_enact(action_id, ActionSource.HUMAN)
-                self._render_example(insert_queue)
+                render_queued = True
                 continue
+            elif render_queued:
+                self._render_example(insert_queue)
+                render_queued = False
             
             # Otherwise, get the next action from the user
             key = self._query_and_parse_user_key()

@@ -97,7 +97,6 @@ class InteractionDatabase:
                 INSERT INTO actions (action_uuid, session_id, action_id, action_type, action, correct, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (str(uuid.uuid4()), session_id, action_id, action_type.value, action, correct, source.value))
-            self.conn.commit()
 
     def set_session_verified(self, session_id: Optional[int] = None) -> None:
         if session_id is None:
@@ -105,7 +104,6 @@ class InteractionDatabase:
         
         with self.lock:
             self.cursor.execute("UPDATE sessions SET verified = ? WHERE session_id = ?", (True, session_id))
-            self.conn.commit()
 
     def get_total_sessions(self) -> int:
         self.cursor.execute("SELECT COUNT(*) FROM sessions")
