@@ -1,13 +1,28 @@
-import sqlite3
+from enum import Enum
+import threading
 import uuid
+
 import pandas as pd
 from datasets import Dataset
-import threading
+import sqlite3
 import time
-from typing import Optional, Generator, List, Dict, Any
+from typing import Optional, Generator
 
 
-class Database:
+class ActionSource(Enum):
+    HUMAN = 'human'
+    AI = 'ai'
+    DATASET = 'dataset'
+
+
+class ActionType(Enum):
+    INPUT = 'input'
+    SET_INSTRUCTION = 'set_instruction'
+    SET_CODE = 'set_code'
+    SET_EXEC_OUTPUT = 'set_exec_output'
+
+
+class InteractionDatabase:
     def __init__(self, db_path: str = 'data/interactions.db', autosave_interval: int = 15):
         self.db_path: str = db_path
         self.conn: sqlite3.Connection = sqlite3.connect(db_path, check_same_thread=False)
@@ -36,7 +51,7 @@ class Database:
                 action_id INTEGER,
                 action_type TEXT,
                 action TEXT,
-                correct BOOLEAN,
+                correct BOOLEAN DEFAULT NULL,
                 source TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions (session_id)
             )
@@ -55,7 +70,14 @@ class Database:
             self.current_action_id = 0
         return self.current_session_id
 
-    def add_action(self, action_type: str, action: str, correct: Optional[bool] = None, source: str = "human", session_id: Optional[int] = None) -> None:
+    def add_action(
+        self,
+        action: str,
+        action_type: ActionType,
+        source: ActionSource = ActionSource.HUMAN,
+        correct: Optional[bool] = None,
+        session_id: Optional[int] = None,
+    ) -> None:
         if session_id is None:
             session_id = self.current_session_id
         
@@ -74,7 +96,7 @@ class Database:
             self.cursor.execute("""
                 INSERT INTO actions (action_uuid, session_id, action_id, action_type, action, correct, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (str(uuid.uuid4()), session_id, action_id, action_type, action, correct, source))
+            """, (str(uuid.uuid4()), session_id, action_id, action_type.value, action, correct, source.value))
             self.conn.commit()
 
     def set_session_verified(self, session_id: Optional[int] = None) -> None:
@@ -131,29 +153,36 @@ class Database:
         actions_dataset.save_to_disk(f"{output_path}/actions")
 
     def autosave(self) -> None:
-        while True:
-            time.sleep(self.autosave_interval)
+        while self.run_autosave_thread:
             with self.lock:
                 self.conn.commit()
+            time.sleep(self.autosave_interval)
 
     def start_autosave(self) -> None:
-        autosave_thread = threading.Thread(target=self.autosave, daemon=True)
-        autosave_thread.start()
+        self.run_autosave_thread = True
+        self.autosave_thread = threading.Thread(target=self.autosave, daemon=True)
+        self.autosave_thread.start()
 
     def close(self) -> None:
+        # Send signal to stop autosave thread
+        self.run_autosave_thread = False
+        # Save any remaining data
+        with self.lock:
+            self.conn.commit()
+        # Then close the connection to the database
         self.conn.close()
 
 
 # Usage example:
 if __name__ == '__main__':
-    db = Database(autosave_interval=15)
+    db = InteractionDatabase(autosave_interval=15)
     
     # Create a new session
     session_id = db.create_session('Initial instruction', 'Initial code', 'Initial output')
     
     # Add actions to the session
-    db.add_action('input', 'User input')
-    db.add_action('set_code', 'Updated code')
+    db.add_action('User input', ActionType.INPUT, source=ActionSource.HUMAN)
+    db.add_action('Updated code', ActionType.SET_CODE, source=ActionSource.AI)
     
     # Set the session as verified
     db.set_session_verified()

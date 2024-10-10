@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from agent import BaseAgent, DummyAgent
 from code_env import *
+from database import ActionSource, ActionType, InteractionDatabase
 from problem_generation import generate_problem
 
 
@@ -184,7 +185,8 @@ class InteractiveCLI():
             agent: BaseAgent,
             make_env: Callable,
             env_kwargs: Optional[dict] = None,
-            supervised_train_mode: str = 'multi-token' # 'multi-token' or 'single-token'
+            supervised_train_mode: str = 'multi-token', # 'multi-token' or 'single-token'
+            db_path: Optional[str] = 'data/interactions.db',
         ):
         """Initializes the interactive CLI.
 
@@ -202,6 +204,19 @@ class InteractiveCLI():
         self.user_feedback = ''
         self.curr_reward = 0
         self.state = CLIState.MENU
+        
+        self._use_db = db_path is not None
+        if self._use_db:
+            self.db = InteractionDatabase(db_path)
+            self.db.create_session()
+    
+    # TODO: Add setting the prompt actions to the database too
+    def _env_enact(self, action: int, source: ActionSource = ActionSource.HUMAN, correct: Optional[bool] = None):
+        """Enacts an action in the environment and updates the database."""
+        self.env.step(action)
+        if self._use_db:
+            action_str = self.agent.tokenizer.decode([action])
+            self.db.add_action(action_str, ActionType.INPUT, source, correct)
 
     def _get_available_commands(self):
         """Returns a dictionary of available commands for the current state."""
@@ -321,7 +336,10 @@ class InteractiveCLI():
         self.user_prompt = self.stdscr.getstr(1, 0).decode('utf-8')
         curses.noecho()
         
-        self.env.set_instruction(self.agent.tokenizer.encode(self.user_prompt))
+        prompt_ids = self.agent.tokenizer.encode(self.user_prompt)
+        self.env.set_instruction(prompt_ids)
+        if self._use_db:
+            self.db.add_action(self.user_prompt, ActionType.SET_INSTRUCTION, source=ActionSource.HUMAN)
 
         self.state = CLIState.MENU
 
@@ -329,10 +347,14 @@ class InteractiveCLI():
         """Automatically generates a prompt for the user."""
         # Temporarily disable logging to prevent LiteLLM from printing to the console
         logging.disable(logging.WARNING)
-        problem = generate_problem()
+        self.user_prompt = generate_problem()
         logging.disable(logging.NOTSET)
         
-        self.env.set_instruction(self.agent.tokenizer.encode(problem))
+        prompt_ids = self.agent.tokenizer.encode(self.user_prompt)
+        self.env.set_instruction(prompt_ids)
+        if self._use_db:
+            self.db.add_action(self.user_prompt, ActionType.SET_INSTRUCTION, source=ActionSource.AI)
+
         self.state = CLIState.MENU
 
     def _get_env_code(self, include_cursor: bool = False):
@@ -442,7 +464,7 @@ class InteractiveCLI():
             # If there are actions in the queue, execute them and rerender the environment
             if len(queued_actions) > 0:
                 action_id = queued_actions.pop(0)
-                self.env.step(action_id)
+                self._env_enact(action_id, ActionSource.HUMAN)
                 self._render_example(insert_queue)
                 continue
             
@@ -457,7 +479,7 @@ class InteractiveCLI():
                     queued_actions.append(self.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
                     insert_queue = ''
                     for act in actions:
-                        self.env.step(act)
+                        self._env_enact(act, ActionSource.HUMAN)
                 break
             elif key == 'KEY_RESIZE':
                 continue
@@ -482,7 +504,8 @@ class InteractiveCLI():
             
             # Otherwise it is just a normal command token
             else:
-                self.env.step(self.agent.tokenizer.convert_tokens_to_ids(key))
+                action_id = self.agent.tokenizer.convert_tokens_to_ids(key)
+                self._env_enact(action_id, ActionSource.HUMAN)
             
             self._render_example(insert_queue)
 
@@ -505,16 +528,8 @@ class InteractiveCLI():
                 stop_flag = True
                 break
             
-            self.env.step(action)
+            self._env_enact(action, ActionSource.AI)
             act_idx += 1
-
-        # for _ in range(self.agent.max_gen_length):
-        #     self._render_menu()
-        #     action = self.agent.get_action(self.user_prompt, self.env.get_obs())
-        #     if action == self.agent.eos_token:
-        #         self.agent.clear_action_queue()
-        #         break
-        #     self.env.step(action)
 
         self.state = CLIState.MENU
 
@@ -527,6 +542,7 @@ class InteractiveCLI():
             if self.state == CLIState.MENU:
                 terminate = self._handle_menu()
                 if terminate:
+                    self.db.close()
                     break
             elif self.state == CLIState.PROMPT:
                 self._handle_prompt()
