@@ -2,7 +2,8 @@ import curses
 from curses import ascii
 import enum
 import logging
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, List, Tuple
+import copy
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -87,6 +88,7 @@ class CLIState(enum.Enum):
     EXAMPLE = 2
     AGENT_TURN = 3
     AUTO_PROMPT = 4
+    TRAIN = 5
 
 
 class LineWriter():
@@ -210,6 +212,9 @@ class InteractiveCLI():
             self.db = InteractionDatabase(db_path)
             self.db.create_session()
     
+        self.last_trained_step = 0
+        self.last_trained_env = copy.deepcopy(self.env)  # Initialize with the starting environment
+    
     # TODO: Add setting the prompt actions to the database too
     def _env_enact(self, action: int, source: ActionSource = ActionSource.HUMAN, correct: Optional[bool] = None):
         """Enacts an action in the environment and updates the database."""
@@ -224,6 +229,7 @@ class InteractiveCLI():
             return {
                 'p': '[p]rompt',
                 'e': '[e]xample',
+                't': '[t]rain',
                 '+': '[+] reward',
                 '-': '[-] reward',
                 'ENTER': '[ENTER] end turn'
@@ -313,6 +319,8 @@ class InteractiveCLI():
             self.state = CLIState.AUTO_PROMPT
         elif key == 'e':
             self.state = CLIState.EXAMPLE
+        elif key == 't':
+            self.state = CLIState.TRAIN
         elif key in ('+', '='):
             self.curr_reward += 1
         elif key == '-':
@@ -536,6 +544,40 @@ class InteractiveCLI():
             act_idx += 1
 
         self.state = CLIState.MENU
+        
+    def _handle_train(self):
+        """Handles training the agent."""
+        self.stdscr.clear()
+        self.stdscr.addstr(0, 0, "Training the agent...", curses.A_BOLD)
+        self.stdscr.refresh()
+
+        self.train_agent()
+
+        print()
+        print('=' * 40)
+        print()
+        print("Training complete, press any key to return to the menu...")
+
+        self.stdscr.getkey()
+        self.state = CLIState.MENU
+
+    def train_agent(self):
+        """
+        Trains the agent using actions since the last training session.
+        """
+        actions = self.db.get_actions_since_action_id(self.last_trained_step)
+        if not actions:
+            return
+
+        # Create a copy of the environment state from the last training session
+        env = self.last_trained_env
+    
+        # Train the agent
+        self.last_trained_env = self.agent.train_on_actions(env, actions)
+
+        # Update the last trained action ID and environment state
+        self.last_trained_step = actions[-1][0]
+        self.last_trained_env_state = copy.deepcopy(self.env)
 
     def _interaction_loop(self, stdscr):
         """Main loop that passes control to the appropriate handler function."""
@@ -556,6 +598,8 @@ class InteractiveCLI():
                 self._handle_example()
             elif self.state == CLIState.AGENT_TURN:
                 self._handle_agent_turn()
+            elif self.state == CLIState.TRAIN:
+                self._handle_train()
             else:
                 raise ValueError(f'Invalid state: {self.state}')
 
@@ -574,6 +618,7 @@ def run_cli(config: DictConfig):
         torch_dtype = torch.bfloat16,
     )
     tokenizer = AutoTokenizer.from_pretrained(config.get('tokenizer_name', config.model_name))
+    tokenizer.pad_token_id = tokenizer.eos_token_id
     
     # Add special tokens
     for token in ENV_SPECIAL_TOKENS:

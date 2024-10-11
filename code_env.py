@@ -226,6 +226,18 @@ class InteractivePythonEnv(gym.Env):
     """
     self._instruction = instruction
 
+  def set_code(self, code: List[int]):
+    """
+    Sets the code to the given list of token ids.
+    """
+    self._code = code
+
+  def set_exec_output(self, exec_output: List[int]):
+    """
+    Sets the execution output to the given list of token ids.
+    """
+    self._exec_output = exec_output
+
   def get_obs(self, include_cursor: bool = True) -> List[int]:
     """
     Get the observation, which includes the current instruction, most recent execution output, 

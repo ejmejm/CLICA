@@ -6,7 +6,7 @@ import pandas as pd
 from datasets import Dataset
 import sqlite3
 import time
-from typing import Optional, Generator
+from typing import Optional, Generator, List, Tuple
 
 
 class ActionSource(Enum):
@@ -169,6 +169,25 @@ class InteractionDatabase:
             self.conn.commit()
         # Then close the connection to the database
         self.conn.close()
+
+    def get_actions_since_action_id(self, action_id: int) -> List[Tuple[int, str, str, Optional[bool]]]:
+        """
+        Retrieves all actions from the current session since the given action_id.
+
+        Args:
+            action_id (int): The action_id to start from (exclusive).
+
+        Returns:
+            List[Tuple[int, str, str]]: A list of tuples containing (action_id, action, action_type)
+        """
+        with self.lock:
+            self.cursor.execute("""
+                SELECT action_id, action, action_type, correct
+                FROM actions
+                WHERE session_id = ? AND action_id > ?
+                ORDER BY action_id
+            """, (self.current_session_id, action_id))
+            return self.cursor.fetchall()
 
 
 # Usage example:
