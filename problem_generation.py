@@ -1,7 +1,8 @@
 from enum import Enum
+import logging
 from typing import List, Optional
+
 import litellm
-import random
 
 
 RANDOM_TOPICS = [
@@ -24,6 +25,9 @@ class DifficultyLevel(Enum):
 def generate_problems(n: int = 1, topic: Optional[str] = None, level: Optional[DifficultyLevel] = None, existing_code: Optional[str] = None) -> List[str]:
     prompt = _create_problem_prompt(topic, level, existing_code)
     
+    litellm_logger = logging.getLogger('LiteLLM')
+    original_level = litellm_logger.level
+    litellm_logger.setLevel(logging.ERROR)
     response = litellm.completion(
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": prompt}],
@@ -31,6 +35,7 @@ def generate_problems(n: int = 1, topic: Optional[str] = None, level: Optional[D
         max_tokens=500,
         n=n,
     )
+    litellm_logger.setLevel(original_level)
 
     problems = [choice.message.content.strip() for choice in response.choices]
     return problems

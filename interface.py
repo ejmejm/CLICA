@@ -1,9 +1,10 @@
 import curses
 from curses import ascii
 import enum
-import logging
 from typing import Callable, Optional, Union, List, Tuple
 import copy
+import logging
+import os
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -13,7 +14,7 @@ from agent import BaseAgent, DummyAgent, TransformerAgent
 from code_env import *
 from database import ActionSource, ActionType, InteractionDatabase
 from problem_generation import generate_problem
-from solution_generation import generate_solution
+from solution_generation import generate_solution, get_actions_from_diff
 
 
 # # Map of escape sequences to special keys (e.g. '\033[A' -> 'up')
@@ -318,7 +319,7 @@ class InteractiveCLI():
         key = self.stdscr.getkey()
         if key == 'p':
             self.state = CLIState.PROMPT
-        elif key == KEY_CTRL_P:
+        elif key in (KEY_CTRL_P, ','):
             self.state = CLIState.AUTO_PROMPT
         elif key == 'e':
             self.state = CLIState.EXAMPLE
@@ -330,7 +331,7 @@ class InteractiveCLI():
             self.curr_reward -= 1
         elif key in ('\n', '\r'):
             self.state = CLIState.AGENT_TURN
-        elif key == KEY_CTRL_E:  # Change this block
+        elif key in (KEY_CTRL_E, '.'):  # Change this block
             self.state = CLIState.AUTO_SOLVE
         elif key in ('\x1b', '\x03'): # ESC, ctrl+c
             return True
@@ -359,9 +360,7 @@ class InteractiveCLI():
     def _handle_auto_prompt(self):
         """Automatically generates a prompt for the user."""
         # Temporarily disable logging to prevent LiteLLM from printing to the console
-        logging.disable(logging.WARNING)
         self.user_prompt = generate_problem()
-        logging.disable(logging.NOTSET)
         
         prompt_ids = self.agent.tokenizer.encode(self.user_prompt)
         self.env.set_instruction(prompt_ids)
@@ -553,7 +552,7 @@ class InteractiveCLI():
     def _handle_train(self):
         """Handles training the agent."""
         self.stdscr.clear()
-        self.stdscr.addstr(0, 0, "Training the agent...", curses.A_BOLD)
+        # self.stdscr.addstr(0, 0, "Training the agent...", curses.A_BOLD)
         self.stdscr.refresh()
 
         self.train_agent()
@@ -615,8 +614,17 @@ class InteractiveCLI():
         curses.wrapper(self._interaction_loop)
         self.stdscr = None
 
+    def _render_auto_solve(self):
+        """Renders the auto solve screen to the terminal."""
+        self.stdscr.clear()
+        writer = LineWriter(self.stdscr)
+        self._write_obs_to_screen(writer)
+        self.stdscr.refresh()
+
     def _handle_auto_solve(self):
         """Automatically generates a solution for the current problem."""
+        self._render_auto_solve()
+
         instruction = self._get_env_instruction()
         if not instruction.strip():
             self.state = CLIState.MENU
@@ -629,22 +637,30 @@ class InteractiveCLI():
 
         # Insert the solution into the environment
         solution_ids = self.agent.tokenizer.encode(solution)
-        
-        # TODO: Check if the last token is not a navigation command before deciding if
-        # we need an enter token at the end
-        solution_ids.append(self.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
-        
-        # TODO: Change this to getting a diff, and getting the actions to fix it
-        for action in solution_ids:
+        current_ids = self.env.get_dict_obs(include_cursor=False)['code']
+        actions = get_actions_from_diff(current_ids, solution_ids, self.agent.tokenizer, self.env._cursor_pos)
+
+        for action in actions:
             self._env_enact(action, ActionSource.AI)
+            self._render_auto_solve()
 
         self.state = CLIState.MENU
 
 
+def suppress_warnings():
+    # Suppress logger warnings
+    logging.getLogger('LiteLLM').setLevel(logging.ERROR)
+    logging.getLogger('Pydantic').setLevel(logging.ERROR)
+
+    # Suppress TensorFlow warnings
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+
 @hydra.main(version_base=None, config_path='conf', config_name='default')
 def run_cli(config: DictConfig):
+    suppress_warnings()
     config = OmegaConf.create(config)
-    
+
     model = AutoModelForCausalLM.from_pretrained(
         config.model_name,
         torch_dtype = torch.bfloat16,
@@ -654,7 +670,7 @@ def run_cli(config: DictConfig):
     
     # Add special tokens
     for token in ENV_SPECIAL_TOKENS:
-      add_and_init_special_token(model, tokenizer, token)
+      add_and_init_special_token(token, tokenizer, model)
       
     device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)

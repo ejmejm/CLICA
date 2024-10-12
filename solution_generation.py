@@ -1,10 +1,11 @@
 import difflib
+import logging
 from typing import Optional, List
 
 import litellm
 from transformers import PreTrainedTokenizer
 
-from code_env import KEY_LEFT_TOKEN, KEY_RIGHT_TOKEN, KEY_BACKSPACE_TOKEN
+from code_env import KEY_LEFT_TOKEN, KEY_RIGHT_TOKEN, KEY_BACKSPACE_TOKEN, KEY_ENTER_TOKEN
 
 
 def generate_solution(instruction: str, code: str = '', exec_output: str = '') -> str:
@@ -21,12 +22,16 @@ def generate_solution(instruction: str, code: str = '', exec_output: str = '') -
     """
     prompt = create_solution_prompt(instruction, code, exec_output)
     
+    litellm_logger = logging.getLogger('LiteLLM')
+    original_level = litellm_logger.level
+    litellm_logger.setLevel(logging.ERROR)
     response = litellm.completion(
         model='gpt-3.5-turbo',
         messages=[{'role': 'system', 'content': prompt}],
         temperature=0.7,
         max_tokens=1000,
     )
+    litellm_logger.setLevel(original_level)
 
     response_text = response.choices[0].message.content.strip()
     response_code = extract_code(response_text)
@@ -225,7 +230,7 @@ if __name__ == '__main__':
 
     print('\nTesting get_actions_from_diff function:')
     from transformers import AutoTokenizer
-    from code_env import add_and_init_special_token, InteractivePythonEnv, KEY_ENTER_TOKEN, ENV_SPECIAL_TOKENS
+    from code_env import add_and_init_special_token, InteractivePythonEnv, ENV_SPECIAL_TOKENS
 
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained('gpt2')

@@ -19,7 +19,6 @@ from datasets import Dataset
 
 from code_env import COMMAND_TOKENS
 from database import ActionType
-from logging_utils import LoggingRedirector
 
 
 IGNORE_INDEX = -100
@@ -224,7 +223,6 @@ class TransformerAgent(BaseAgent):
         )
 
         # Set up logging to file
-        # with LoggingRedirector('logs/training_log.txt'):
         trainer.train()
 
         # Update the model reference

@@ -289,33 +289,37 @@ class InteractivePythonEnv(gym.Env):
     self._instruction = instruction
 
 
-def add_and_init_special_token(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, token: str):
+def add_and_init_special_token(token: str, tokenizer: PreTrainedTokenizer, model: PreTrainedModel = None):
   """Add a custom token to the tokenizer and model."""
-  # Tokenize the components of the custom token
-  components = tokenizer.tokenize(token)  # Remove <|...|>
-  
-  # Get the embeddings of the component tokens
-  with torch.no_grad():
-    component_ids = tokenizer.convert_tokens_to_ids(components)
-    component_embeddings = model.get_input_embeddings()(torch.tensor(component_ids))
-  
-  # Calculate the sum of component embeddings
-  new_embedding = component_embeddings.mean(dim=0)
-  
-  # Normalize the new embedding to match the expected magnitude
-  with torch.no_grad():
-    existing_embeddings = model.get_input_embeddings().weight.data
-    avg_norm = existing_embeddings.norm(dim=1).mean()
-    new_embedding = F.normalize(new_embedding, dim=0) * avg_norm
   
   # Add the new token to the tokenizer
+  
+  if model is not None:
+    # Tokenize the components of the custom token
+    components = tokenizer.tokenize(token)  # Remove <|...|>
+    
+    # Get the embeddings of the component tokens
+    with torch.no_grad():
+      component_ids = tokenizer.convert_tokens_to_ids(components)
+      component_embeddings = model.get_input_embeddings()(torch.tensor(component_ids))
+    
+    # Calculate the sum of component embeddings
+    new_embedding = component_embeddings.mean(dim=0)
+    
+    # Normalize the new embedding to match the expected magnitude
+    with torch.no_grad():
+      existing_embeddings = model.get_input_embeddings().weight.data
+      avg_norm = existing_embeddings.norm(dim=1).mean()
+      new_embedding = F.normalize(new_embedding, dim=0) * avg_norm
+
   num_added_tokens = tokenizer.add_special_tokens({"additional_special_tokens": [token]})
   
-  # Resize the model's token embeddings
-  model.resize_token_embeddings(len(tokenizer))
-  
-  # Set the embedding for the new token
-  model.get_input_embeddings().weight.data[-1] = new_embedding
+  if model is not None:
+    # Resize the model's token embeddings
+    model.resize_token_embeddings(len(tokenizer))
+    
+    # Set the embedding for the new token
+    model.get_input_embeddings().weight.data[-1] = new_embedding
 
   return num_added_tokens
 
@@ -330,7 +334,7 @@ if __name__ == '__main__':
     
     # Add special tokens
     for token in ENV_SPECIAL_TOKENS:
-      add_and_init_special_token(model, tokenizer, token)
+      add_and_init_special_token(token, tokenizer, model)
       
     vocab = tokenizer.get_vocab()
 
