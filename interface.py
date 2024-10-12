@@ -13,6 +13,7 @@ from agent import BaseAgent, DummyAgent, TransformerAgent
 from code_env import *
 from database import ActionSource, ActionType, InteractionDatabase
 from problem_generation import generate_problem
+from solution_generation import generate_solution
 
 
 # # Map of escape sequences to special keys (e.g. '\033[A' -> 'up')
@@ -89,6 +90,7 @@ class CLIState(enum.Enum):
     AGENT_TURN = 3
     AUTO_PROMPT = 4
     TRAIN = 5
+    AUTO_SOLVE = 6  # Add this line
 
 
 class LineWriter():
@@ -233,6 +235,7 @@ class InteractiveCLI():
                 '+': '[+] reward',
                 '-': '[-] reward',
                 'ENTER': '[ENTER] end turn'
+                # Remove the '^e': '[ctrl+e] generate solution' line
             }
         elif self.state == CLIState.PROMPT:
             return {'ESC': '[ESC] menu'}
@@ -327,6 +330,8 @@ class InteractiveCLI():
             self.curr_reward -= 1
         elif key in ('\n', '\r'):
             self.state = CLIState.AGENT_TURN
+        elif key == KEY_CTRL_E:  # Change this block
+            self.state = CLIState.AUTO_SOLVE
         elif key in ('\x1b', '\x03'): # ESC, ctrl+c
             return True
         return False
@@ -596,6 +601,8 @@ class InteractiveCLI():
                 self._handle_auto_prompt()
             elif self.state == CLIState.EXAMPLE:
                 self._handle_example()
+            elif self.state == CLIState.AUTO_SOLVE:
+                self._handle_auto_solve()
             elif self.state == CLIState.AGENT_TURN:
                 self._handle_agent_turn()
             elif self.state == CLIState.TRAIN:
@@ -607,6 +614,31 @@ class InteractiveCLI():
         """Call externally to start the interactive CLI."""
         curses.wrapper(self._interaction_loop)
         self.stdscr = None
+
+    def _handle_auto_solve(self):
+        """Automatically generates a solution for the current problem."""
+        instruction = self._get_env_instruction()
+        if not instruction.strip():
+            self.state = CLIState.MENU
+            return
+
+        code = self._get_env_code()
+        exec_output = self._get_env_exec_output()
+
+        solution = generate_solution(instruction, code, exec_output)
+
+        # Insert the solution into the environment
+        solution_ids = self.agent.tokenizer.encode(solution)
+        
+        # TODO: Check if the last token is not a navigation command before deciding if
+        # we need an enter token at the end
+        solution_ids.append(self.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
+        
+        # TODO: Change this to getting a diff, and getting the actions to fix it
+        for action in solution_ids:
+            self._env_enact(action, ActionSource.AI)
+
+        self.state = CLIState.MENU
 
 
 @hydra.main(version_base=None, config_path='conf', config_name='default')
