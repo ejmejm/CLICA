@@ -17,8 +17,8 @@ from transformers import (
 )
 from datasets import Dataset
 
-from code_env import COMMAND_TOKENS
-from database import ActionType
+from clica.code_env import COMMAND_TOKENS
+from clica.database import ActionType
 
 
 IGNORE_INDEX = -100

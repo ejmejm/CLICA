@@ -1,8 +1,6 @@
 from io import StringIO
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stdout
 from typing import Dict, List, Tuple
-import sys
-import warnings
 import traceback
 
 import gymnasium as gym

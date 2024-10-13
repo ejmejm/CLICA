@@ -5,7 +5,7 @@ from typing import Optional, List
 import litellm
 from transformers import PreTrainedTokenizer
 
-from code_env import KEY_LEFT_TOKEN, KEY_RIGHT_TOKEN, KEY_BACKSPACE_TOKEN, KEY_ENTER_TOKEN
+from clica.code_env import KEY_LEFT_TOKEN, KEY_RIGHT_TOKEN, KEY_BACKSPACE_TOKEN, KEY_ENTER_TOKEN
 
 
 def generate_solution(instruction: str, code: str = '', exec_output: str = '') -> str:
@@ -230,7 +230,7 @@ if __name__ == '__main__':
 
     print('\nTesting get_actions_from_diff function:')
     from transformers import AutoTokenizer
-    from code_env import add_and_init_special_token, InteractivePythonEnv, ENV_SPECIAL_TOKENS
+    from clica.code_env import add_and_init_special_token, InteractivePythonEnv, ENV_SPECIAL_TOKENS
 
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
