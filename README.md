@@ -1,3 +1,7 @@
+# CLICA
+
+CLICA (Continual Learning Interactive Code Agent) is a command-line tool for interactively training a coding agent. It allows users to provide coding instructions, receive generated solutions, and continuously improve the agent's capabilities through interaction. The system uses a database to track sessions and actions, enabling the agent to adapt to user preferences over time.
+
 ## Data Format
 
 ### Sessions Table
