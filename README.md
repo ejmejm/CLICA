@@ -1,5 +1,3 @@
-
-
 ## Data Format
 
 ### Sessions Table
@@ -23,3 +21,12 @@
 | action      | STRING    |                             | The content of the action                                                                                          |
 | correct     | BOOLEAN   | OPTIONAL                    | Indicates if the action is correct. Incorrect actions can be used for setup but should not be trained on directly |
 | source      | ENUM      |                             | Source of the action: {human, ai, dataset}                                                                         |
+
+## License
+
+This project is licensed under the MIT License with Commons Clause. This means you are free to use, modify, and distribute the software for any purpose, but selling the software is prohibited.
+
+For more details, see the [LICENSE](LICENSE) file in the project repository.
+
+The MIT License is available at: https://opensource.org/license/mit
+The Commons Clause is available at: https://commonsclause.com/
