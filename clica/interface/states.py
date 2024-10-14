@@ -1,9 +1,13 @@
 from __future__ import annotations
 import copy
+import curses
+import os
+import random
+import string
 from typing import TYPE_CHECKING
 
 from clica.interface.base_state import CLIState
-from clica.interface.curses_utils import LineWriter, curses
+from clica.interface.curses_utils import get_text_input, LineWriter
 from clica.interface.inputs import *
 from clica.database import ActionSource, ActionType
 from clica.problem_generation import generate_problem
@@ -310,6 +314,64 @@ class TrainState(CLIState):
         pass
 
 
+class SaveModelState(CLIState):
+    state_id: str = 'SAVE_MODEL'
+
+    @staticmethod
+    def _generate_default_model_name():
+        """Generates a default model name."""
+        random_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        return f"model_{random_id}"
+
+    @staticmethod
+    def handle_execution(cli: InteractiveCLI) -> CLIState:
+        """Handles saving the model."""
+        cli.stdscr.clear()
+
+        # A save directory must be set in the config to save a model
+        if not cli.model_save_dir:
+            cli.stdscr.addstr(0, 0, "Error: model_save_dir not set in config")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
+        
+        writer = LineWriter(cli.stdscr)
+        prompt = "Enter model name to save: "
+        writer.write(prompt, curses.A_BOLD)
+        writer.skip_lines(1)
+        writer.write("[ENTER] save | [ESC] cancel")
+        
+        default_name = cli.loaded_model_name or SaveModelState._generate_default_model_name()
+        text_window = cli.stdscr.subwin(1, 40, 0, len(prompt))
+
+        cli.stdscr.refresh()
+
+        model_name = get_text_input(text_window, default_name)
+
+        # If escape key is pressed, return to menu
+        if model_name is None:
+            return MenuState
+
+        cli.stdscr.clear()
+
+        if not model_name:
+            cli.stdscr.addstr(0, 0, "Error: Model needs a name to save")
+            cli.stdscr.addstr(2, 0, "Press any key to try again...")
+            cli.stdscr.getch()
+            return SaveModelState
+
+        full_path = os.path.join(cli.model_save_dir, model_name)
+        # cli.agent.save(full_path)
+        cli.loaded_model_name = model_name
+        cli.stdscr.addstr(0, 0, f"Model saved to: {full_path}")
+
+        cli.stdscr.addstr(2, 0, "Press any key to continue...")
+        cli.stdscr.getch()
+
+        return MenuState
+
+
 class MenuState(CLIState):
     state_id: str = 'MENU'
     key_to_state = {
@@ -318,6 +380,7 @@ class MenuState(CLIState):
         ',': AutoPromptState,
         'e': ExampleState,
         't': TrainState,
+        's': SaveModelState,
         '\n': AgentTurnState,
         '\r': AgentTurnState,
         KEY_CTRL_E: AutoSolveState,
@@ -367,6 +430,7 @@ class MenuState(CLIState):
             'p': '[p]rompt',
             'e': '[e]xample',
             't': '[t]rain',
+            's': '[s]ave model',
             '+': '[+] reward',
             '-': '[-] reward',
             'ENTER': '[ENTER] end turn'

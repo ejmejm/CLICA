@@ -14,11 +14,6 @@ class CLIState(ABC):
     @abstractmethod
     def handle_execution(cli_context: InteractiveCLI) -> Optional[str]:
         pass
-
-    @staticmethod
-    @abstractmethod
-    def _render(cli_context: InteractiveCLI) -> None:
-        pass
     
     @staticmethod
     def _get_available_commands() -> dict[str, str]:

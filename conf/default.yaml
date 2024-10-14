@@ -1,2 +1,3 @@
 model_name: gpt2
 device: cuda
+model_save_dir: ./models

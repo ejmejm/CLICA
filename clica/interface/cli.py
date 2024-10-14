@@ -6,9 +6,9 @@ import os
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 
-from clica.agent import BaseAgent, TransformerAgent
+from clica.agent import BaseAgent
 from clica.database import ActionSource, ActionType, InteractionDatabase
 from clica.interface.curses_utils import LineWriter
 from clica.interface.inputs import *
@@ -25,6 +25,7 @@ class InteractiveCLI():
             env_kwargs: Optional[dict] = None,
             supervised_train_mode: str = 'multi-token', # 'multi-token' or 'single-token'
             db_path: Optional[str] = 'data/interactions.db',
+            model_save_dir: Optional[str] = None,
         ):
         """Initializes the interactive CLI.
 
@@ -49,6 +50,9 @@ class InteractiveCLI():
     
         self.last_trained_step = 0
         self.last_trained_env = copy.deepcopy(self.env)  # Initialize with the starting environment
+        
+        self.model_save_dir = model_save_dir
+        self.loaded_model_name = None
     
     # TODO: Add setting the prompt actions to the database too
     def _env_enact(self, action: int, source: ActionSource = ActionSource.HUMAN, correct: Optional[bool] = None):
@@ -171,30 +175,33 @@ def suppress_cli_warnings():
 
 
 @hydra.main(version_base=None, config_path='../../conf', config_name='default')
-def run_cli(config: DictConfig):
+def test_cli(config: DictConfig):
+    from clica.agent import DummyAgent
+
     suppress_cli_warnings()
     config = OmegaConf.create(config)
 
-    model = AutoModelForCausalLM.from_pretrained(
-        config.model_name,
-        torch_dtype = torch.bfloat16,
-    )
     tokenizer = AutoTokenizer.from_pretrained(config.get('tokenizer_name', config.model_name))
     tokenizer.pad_token_id = tokenizer.eos_token_id
     
     # Add special tokens
     for token in ENV_SPECIAL_TOKENS:
-      add_and_init_special_token(token, tokenizer, model)
-      
-    device = config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-    model.to(device)
-      
+      add_and_init_special_token(token, tokenizer)
+
     vocab = tokenizer.get_vocab()
     
-    agent = TransformerAgent(model, tokenizer, max_gen_length=16) # DummyAgent(model, tokenizer, max_gen_length=8)
+    db_path = os.path.join(
+        os.path.dirname(__file__),
+        '../../data/test_interactions.db',
+    )
+    print(db_path)
+
+    agent = DummyAgent(None, tokenizer, max_gen_length=8)
     cli = InteractiveCLI(
         agent = agent,
         make_env = InteractivePythonEnv,
+        db_path = db_path,
+        model_save_dir = config.get('model_save_dir'),
         env_kwargs = dict(
             tokenizer = agent.tokenizer,
             vocab = vocab,
@@ -204,4 +211,4 @@ def run_cli(config: DictConfig):
 
 
 if __name__ == '__main__':
-    run_cli()
+    test_cli()

@@ -1,4 +1,5 @@
 import curses
+from curses.textpad import Textbox
 from typing import Optional, Union
 
 
@@ -88,3 +89,41 @@ class LineWriter():
 
     def get_current_line(self):
         return self.line_idx
+
+
+def get_text_input(window: curses.window, initial_text: str = '') -> Optional[str]:
+    """Gets text input from the user.
+    
+    Args:
+        window (curses.window): The curses window to write to.
+        initial_text (str, optional): Initial text in the textbox. Pass nothing for an empty textbox.
+    
+    Returns:
+        Optional[str]: The text input by the user, or None if the user pressed the escape key to exit.
+    """
+    textbox = Textbox(window)
+    for char in initial_text:
+        textbox.do_command(char)
+    
+    escaped = False
+
+    # Source: https://stackoverflow.com/questions/47481955/python-curses-detecting-the-backspace-key/75950899#75950899
+    def validate(char: str) -> str:
+        nonlocal escaped
+
+        # Exit input with the escape key
+        escape = 27
+        if char == escape:
+            escaped = True
+            char = curses.ascii.BEL # Control-G
+        
+        # Delete the character to the left of the cursor
+        elif char in (curses.KEY_BACKSPACE, curses.ascii.DEL):
+            char = curses.KEY_BACKSPACE
+
+        return char
+
+    textbox.edit(validate)
+    text = textbox.gather().strip()
+    
+    return text if not escaped else None
