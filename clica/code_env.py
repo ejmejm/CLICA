@@ -216,7 +216,7 @@ class InteractivePythonEnv(gym.Env):
             error_trace = traceback.format_exc()
     
     output = stdout_capture.getvalue() + error_trace
-    self._exec_output = self._tokenizer.encode(output)
+    self._exec_output = self._tokenizer.encode(output, add_special_tokens=False)
 
   def set_instruction(self, instruction: List[int]):
     """
@@ -347,7 +347,7 @@ if __name__ == '__main__':
 
     # Test adding some code
     code = "print('Hello, World!')"
-    for token_id in tokenizer.encode(code):
+    for token_id in tokenizer.encode(code, add_special_tokens=False):
       print('Taking action:', tokenizer.decode([token_id]))
       obs, _, _, _ = env.step(token_id)
     
@@ -384,7 +384,7 @@ if __name__ == '__main__':
     # Test adding text to queue
     new_text = "Python"
     for char in new_text:
-        token = tokenizer.encode(char)[0]
+        token = tokenizer.encode(char, add_special_tokens=False)[0]
         obs, _, _, _ = env.step(token)
     print("Observation after adding text to queue:")
     print(tokenizer.decode(obs))

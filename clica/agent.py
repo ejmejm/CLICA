@@ -182,7 +182,7 @@ class TransformerAgent(BaseAgent):
 
         for action_idx, action, action_type, correct in actions:
             obs = env.get_obs()
-            action_token_ids = self.tokenizer.encode(action)
+            action_token_ids = self.tokenizer.encode(action, add_special_tokens=False)
 
             # Handle setting the instruction, code, exec output actions
             if action_type == ActionType.SET_INSTRUCTION.value:

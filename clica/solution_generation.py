@@ -262,7 +262,7 @@ if __name__ == '__main__':
 
     # Reset environment and enter initial code
     env.reset()
-    for token_id in tokenizer.encode(start_code):
+    for token_id in tokenizer.encode(start_code, add_special_tokens=False):
         env.step(token_id)
     env.step(vocab[KEY_ENTER_TOKEN])
 
@@ -270,8 +270,8 @@ if __name__ == '__main__':
     start_ids = env.get_dict_obs(include_cursor=False)['code']
     print(tokenizer.decode(start_ids))
     
-    assert start_ids == tokenizer.encode(start_code)
-    end_ids = tokenizer.encode(end_code)
+    assert start_ids == tokenizer.encode(start_code, add_special_tokens=False)
+    end_ids = tokenizer.encode(end_code, add_special_tokens=False)
     actions = get_actions_from_diff(start_ids, end_ids, tokenizer, env._cursor_pos)
     print('Actions to take:\n', tokenizer.decode(actions))
     print()
