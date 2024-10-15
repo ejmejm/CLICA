@@ -29,7 +29,7 @@ class PromptState(CLIState):
         user_prompt = cli.stdscr.getstr(1, 0).decode('utf-8')
         curses.noecho()
         
-        prompt_ids = cli.agent.tokenizer.encode(user_prompt)
+        prompt_ids = cli.agent.tokenizer.encode(user_prompt, add_special_tokens=False)
         cli.env.set_instruction(prompt_ids)
         if cli._use_db:
             cli.db.add_action(user_prompt, ActionType.SET_INSTRUCTION, source=ActionSource.HUMAN)
@@ -61,7 +61,7 @@ class AutoPromptState(CLIState):
         
         user_prompt = generate_problem()
         
-        prompt_ids = cli.agent.tokenizer.encode(user_prompt)
+        prompt_ids = cli.agent.tokenizer.encode(user_prompt, add_special_tokens=False)
         cli.env.set_instruction(prompt_ids)
         if cli._use_db:
             cli.db.add_action(user_prompt, ActionType.SET_INSTRUCTION, source=ActionSource.AI)
@@ -104,7 +104,7 @@ class ExampleState(CLIState):
             if key == '\x1b':
                 # Enact all actions waiting in the queue before exiting
                 if len(cli.insert_queue) > 0:
-                    actions = cli.agent.tokenizer.encode(cli.insert_queue)
+                    actions = cli.agent.tokenizer.encode(cli.insert_queue, add_special_tokens=False)
                     queued_actions.append(cli.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
                     cli.insert_queue = ''
                     for act in actions:
@@ -115,7 +115,7 @@ class ExampleState(CLIState):
 
             # If enter key, take actions for the queued text, and then take the enter key action
             if key == KEY_CTRL_RIGHT_TOKEN:
-                queued_actions.extend(cli.agent.tokenizer.encode(cli.insert_queue))
+                queued_actions.extend(cli.agent.tokenizer.encode(cli.insert_queue, add_special_tokens=False))
                 queued_actions.append(cli.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
                 cli.insert_queue = ''
                 
@@ -126,7 +126,7 @@ class ExampleState(CLIState):
             # Otherwise it is just a normal command token
             # If there is text queued, this will auto commit that queued text
             elif len(cli.insert_queue) > 0:
-                queued_actions.extend(cli.agent.tokenizer.encode(cli.insert_queue))
+                queued_actions.extend(cli.agent.tokenizer.encode(cli.insert_queue, add_special_tokens=False))
                 queued_actions.append(cli.agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
                 queued_actions.append(cli.agent.tokenizer.convert_tokens_to_ids(key))
                 cli.insert_queue = ''
@@ -212,7 +212,7 @@ class AutoSolveState(CLIState):
 
         solution = generate_solution(instruction, code, exec_output)
 
-        solution_ids = cli.agent.tokenizer.encode(solution)
+        solution_ids = cli.agent.tokenizer.encode(solution, add_special_tokens=False)
         current_ids = cli.env.get_dict_obs(include_cursor=False)['code']
         actions = get_actions_from_diff(current_ids, solution_ids, cli.agent.tokenizer, cli.env._cursor_pos)
 
@@ -280,7 +280,7 @@ class TrainState(CLIState):
         cli.stdscr.clear()
         cli.stdscr.refresh()
 
-        cli.train_agent()
+        TrainState.train_agent(cli)
 
         print()
         print('=' * 40)
@@ -465,6 +465,20 @@ class LoadModelState(CLIState):
         }
 
 
+class ResetSessionState(CLIState):
+    state_id: str = 'RESET_SESSION'
+
+    @staticmethod
+    def handle_execution(cli: InteractiveCLI) -> CLIState:
+        """Resets the session, wiping the environment and starting a new session."""
+        cli.stdscr.clear()
+        writer = LineWriter(cli.stdscr)
+        writer.write("Resetting session...", curses.A_BOLD)
+        cli.stdscr.refresh()
+        cli.reset_session()
+        return MenuState
+
+
 class MenuState(CLIState):
     state_id: str = 'MENU'
     key_to_state = {
@@ -474,13 +488,14 @@ class MenuState(CLIState):
         'e': ExampleState,
         't': TrainState,
         's': SaveModelState,
-        'l': LoadModelState,  # Add this line
+        'l': LoadModelState,
         '\n': AgentTurnState,
         '\r': AgentTurnState,
         KEY_CTRL_E: AutoSolveState,
         '.': AutoSolveState,
         '\x1b': ExitState,
         '\x03': ExitState,
+        'r': ResetSessionState,
     }
     
     @staticmethod
@@ -525,8 +540,9 @@ class MenuState(CLIState):
             'e': '[e]xample',
             't': '[t]rain',
             's': '[s]ave model',
-            'l': '[l]oad model',  # Add this line
+            'l': '[l]oad model',
             '+': '[+] reward',
             '-': '[-] reward',
-            'ENTER': '[ENTER] end turn'
+            'ENTER': '[ENTER] end turn',
+            'r': '[r]eset session',  # Add this line
         }

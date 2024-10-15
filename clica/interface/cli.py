@@ -164,6 +164,15 @@ class InteractiveCLI():
         curses.wrapper(self._interaction_loop)
         self.stdscr = None
 
+    def reset_session(self):
+        """Resets the session, wiping the environment and starting a new session."""
+        self.env.reset()
+        self.curr_reward = 0
+        if self._use_db:
+            self.db.create_session()
+        self.last_trained_step = 0
+        self.last_trained_env = copy.deepcopy(self.env)
+
 
 def suppress_cli_warnings():
     # Suppress logger warnings
