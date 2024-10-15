@@ -362,7 +362,7 @@ class SaveModelState(CLIState):
             return SaveModelState
 
         full_path = os.path.join(cli.model_save_dir, model_name)
-        # cli.agent.save(full_path)
+        cli.agent.save(full_path)
         cli.loaded_model_name = model_name
         cli.stdscr.addstr(0, 0, f"Model saved to: {full_path}")
 

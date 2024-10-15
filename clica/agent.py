@@ -97,11 +97,16 @@ class BaseAgent(nn.Module):
         """
         raise NotImplementedError
 
-    def save_state(self, path: str):
+    def save(self, path: str):
         """Save the state of the agent."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # Save as pretrained model
         self.model.save_pretrained(path)
+        self.tokenizer.save_pretrained(path)
+
+    def load(self, path: str):
+        """Load the state of the agent."""
+        self.model = AutoModelForCausalLM.from_pretrained(path)
+        self.tokenizer = AutoTokenizer.from_pretrained(path)
 
     def train_on_actions(self, env, actions: List[Tuple[int, str, str]]):
         """

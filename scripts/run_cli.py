@@ -31,11 +31,12 @@ def run_cli(config: DictConfig):
     
     agent = TransformerAgent(model, tokenizer, max_gen_length=16)  # DummyAgent(model, tokenizer, max_gen_length=8)
     cli = InteractiveCLI(
-        agent=agent,
-        make_env=InteractivePythonEnv,
-        env_kwargs=dict(
-            tokenizer=agent.tokenizer,
-            vocab=vocab,
+        agent = agent,
+        make_env = InteractivePythonEnv,
+        model_save_dir = config.model_save_dir,
+        env_kwargs = dict(
+            tokenizer = agent.tokenizer,
+            vocab = vocab,
         ),
     )
     cli.run()
