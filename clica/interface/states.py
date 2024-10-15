@@ -372,6 +372,99 @@ class SaveModelState(CLIState):
         return MenuState
 
 
+class LoadModelState(CLIState):
+    state_id: str = 'LOAD_MODEL'
+
+    @staticmethod
+    def handle_execution(cli: InteractiveCLI) -> CLIState:
+        """Handles loading a saved model."""
+        if not cli.model_save_dir:
+            cli.stdscr.clear()
+            cli.stdscr.addstr(0, 0, "Error: model_save_dir not set in config")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
+
+        model_files = [f for f in os.listdir(cli.model_save_dir) if os.path.isdir(os.path.join(cli.model_save_dir, f))]
+        if not model_files:
+            cli.stdscr.clear()
+            cli.stdscr.addstr(0, 0, "No saved models found.")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
+
+        selected_index = 0
+        while True:
+            LoadModelState._render(cli, model_files, selected_index)
+            key = cli.stdscr.getch()
+
+            if key == ord('\n'):  # Enter key
+                selected_model = model_files[selected_index]
+                full_path = os.path.join(cli.model_save_dir, selected_model)
+                
+                cli.stdscr.clear()
+                cli.stdscr.addstr(0, 0, f"Loading model '{selected_model}'...")
+                cli.stdscr.refresh()
+                
+                try:
+                    cli.agent.load(full_path)
+                    cli.loaded_model_name = selected_model
+                except Exception as e:
+                    cli.stdscr.clear()
+                    cli.stdscr.addstr(0, 0, f"Error loading model '{selected_model}': {str(e)}")
+                    cli.stdscr.addstr(2, 0, "Press any key to continue...")
+                    cli.stdscr.refresh()
+                    cli.stdscr.getch()
+                    return MenuState
+
+                cli.stdscr.clear()
+                cli.stdscr.addstr(0, 0, f"Model '{selected_model}' loaded!")
+                cli.stdscr.addstr(2, 0, "Press any key to continue...")
+                cli.stdscr.refresh()
+
+                cli.stdscr.getch()
+                return MenuState
+
+            elif key == 27:  # 'q' or ESC key
+                return MenuState
+
+            elif key == curses.KEY_UP:
+                selected_index = (selected_index - 1) % len(model_files)
+
+            elif key == curses.KEY_DOWN:
+                selected_index = (selected_index + 1) % len(model_files)
+
+    @staticmethod
+    def _render(cli: InteractiveCLI, model_files: list[str], selected_index: int):
+        """Renders the list of saved models."""
+        cli.stdscr.clear()
+
+        writer = LineWriter(cli.stdscr)
+        writer.write('Select a model to load:', curses.A_BOLD)
+        writer.skip_lines(1)
+
+        for i, model in enumerate(model_files):
+            if i == selected_index:
+                writer.write(f'-> {model}', curses.A_REVERSE)
+            else:
+                writer.write(f'   {model}')
+
+        writer.skip_lines(2)
+        cli._write_command_menu_to_screen(writer)
+
+        cli.stdscr.refresh()
+
+    @staticmethod
+    def _get_available_commands() -> dict[str, str]:
+        return {
+            '↑/↓': '[↑/↓] Navigate',
+            'ENTER': '[ENTER] Load',
+            'ESC': '[ESC] Cancel'
+        }
+
+
 class MenuState(CLIState):
     state_id: str = 'MENU'
     key_to_state = {
@@ -381,6 +474,7 @@ class MenuState(CLIState):
         'e': ExampleState,
         't': TrainState,
         's': SaveModelState,
+        'l': LoadModelState,  # Add this line
         '\n': AgentTurnState,
         '\r': AgentTurnState,
         KEY_CTRL_E: AutoSolveState,
@@ -431,6 +525,7 @@ class MenuState(CLIState):
             'e': '[e]xample',
             't': '[t]rain',
             's': '[s]ave model',
+            'l': '[l]oad model',  # Add this line
             '+': '[+] reward',
             '-': '[-] reward',
             'ENTER': '[ENTER] end turn'

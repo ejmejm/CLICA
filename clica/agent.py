@@ -2,12 +2,13 @@ from dataclasses import dataclass
 import os
 import logging
 import random
-import sys
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import torch
 from torch import nn
 from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
     StoppingCriteria,
