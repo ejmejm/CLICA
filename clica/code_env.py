@@ -131,9 +131,10 @@ class InteractivePythonEnv(gym.Env):
         - The termination flag
         - The extra info
     """
-    
     if action in self._command_token_ids:
       self._apply_command(action)
+    elif action == self._tokenizer.eos_token:
+      pass
     else:
       self._text_queue.append(action)
 

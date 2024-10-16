@@ -1,3 +1,5 @@
+import os
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import torch
@@ -11,6 +13,7 @@ from clica.interface.cli import suppress_cli_warnings
 @hydra.main(version_base=None, config_path='../conf', config_name='default')
 def run_cli(config: DictConfig):
     suppress_cli_warnings()
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     config = OmegaConf.create(config)
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -29,7 +32,7 @@ def run_cli(config: DictConfig):
       
     vocab = tokenizer.get_vocab()
     
-    agent = TransformerAgent(model, tokenizer, max_gen_length=16)  # DummyAgent(model, tokenizer, max_gen_length=8)
+    agent = TransformerAgent(model, tokenizer, max_gen_length=128)  # DummyAgent(model, tokenizer, max_gen_length=8)
     cli = InteractiveCLI(
         agent = agent,
         make_env = InteractivePythonEnv,

@@ -4,15 +4,14 @@ import curses
 import os
 import random
 import string
-import yaml
-import sys
-import io
+import traceback
 from typing import TYPE_CHECKING
 
 from clica.interface.base_state import CLIState
 from clica.interface.curses_utils import get_text_input, LineWriter, select_from_list, select_multiple_from_list
 from clica.interface.inputs import *
 from clica.database import ActionSource, ActionType
+from clica.eval import run_agent_eval
 from clica.problem_generation import generate_problem
 from clica.solution_generation import generate_solution, get_actions_from_diff
 
@@ -255,17 +254,13 @@ class AgentTurnState(CLIState):
         action = None
         recurrent_state = None
         act_idx = 0
-        stop_flag = False
-        while act_idx < cli.agent.max_gen_length and not stop_flag:
+        while act_idx < cli.agent.max_gen_length:
             AgentTurnState._render(cli)
             recurrent_state, action = cli.agent.get_action(recurrent_state, cli.env.get_obs())
-            # for action in actions:
-            if action == cli.agent.eos_token or act_idx >= cli.agent.max_gen_length:
-                stop_flag = True
-                break
-            
             cli._env_enact(action, ActionSource.AI)
             act_idx += 1
+            if action == cli.agent.eos_token:
+                break
 
         return MenuState
 
@@ -398,7 +393,7 @@ class LoadModelState(CLIState):
             cli.stdscr.getch()
             return MenuState
 
-        selected_models = select_multiple_from_list(cli.stdscr, model_files, 'Select models to load:')
+        selected_models = select_from_list(cli.stdscr, model_files, 'Select model to load:')
 
         if not selected_models:
             return MenuState
@@ -472,7 +467,7 @@ class EvalState(CLIState):
 
         # Get list of eval items
         eval_items = [
-            f.rsplit('.', 1)[0] for f in os.listdir(eval_data_path)
+            f for f in os.listdir(eval_data_path)
             if os.path.exists(os.path.join(eval_data_path, f))
         ]
         
@@ -503,10 +498,14 @@ class EvalState(CLIState):
 
             try:
                 item_path = os.path.join(eval_data_path, item)
-                result = cli.agent.eval(item_path)
+                result = run_agent_eval(cli.agent, item_path)
                 results[item] = result
             except Exception as e:
-                results[item] = {"error": str(e)}
+                stack_trace = traceback.format_exc()
+                results[item] = {
+                    "error": str(e),
+                    "stack_trace": stack_trace
+                }
 
         curses.resetty()
 

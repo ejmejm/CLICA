@@ -190,6 +190,7 @@ def test_cli(config: DictConfig):
     from clica.agent import DummyAgent
 
     suppress_cli_warnings()
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     config = OmegaConf.create(config)
 
     tokenizer = AutoTokenizer.from_pretrained(config.get('tokenizer_name', config.model_name))

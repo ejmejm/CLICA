@@ -19,7 +19,7 @@ from transformers import (
 )
 from datasets import Dataset
 
-from clica.code_env import COMMAND_TOKENS
+from clica.code_env import InteractivePythonEnv, COMMAND_TOKENS
 from clica.database import ActionType
 
 
@@ -80,13 +80,28 @@ class BaseAgent(nn.Module):
         """Returns the EOS token id."""
         return self.tokenizer.eos_token
 
-    def get_action(self, *args) -> Tuple[RecurrentState, int]:
+    def get_action(self, state: RecurrentState, obs: List[int]) -> Tuple[RecurrentState, int]:
         """Returns the model's action given the observation string.
 
         Returns:
             The model's action.
         """
         raise NotImplementedError
+    
+    def execute_action_loop(self, state: RecurrentState, env: InteractivePythonEnv) -> List[int]:
+        """Enacts actions in the environment until the EOS token is generated or the max_gen_length is reached.
+        
+        Returns:
+            The list of actions taken.
+        """
+        actions = []
+        for _ in range(self.max_gen_length):
+            state, action = self.get_action(state, env.get_obs())
+            env.step(action)
+            actions.append(action)
+            if action == self.tokenizer.eos_token:
+                break
+        return actions
 
     def train_supervised(self, buffer: Tuple[List[int], List[int]]) -> float:
         """Trains the model on the given observations and actions.
@@ -97,10 +112,6 @@ class BaseAgent(nn.Module):
         Returns:
             The loss of the training step.
         """
-        raise NotImplementedError
-    
-    def eval(self, path: str) -> Dict[str, Any]:
-        """Evaluates the model on the given data."""
         raise NotImplementedError
 
     def save(self, path: str):
