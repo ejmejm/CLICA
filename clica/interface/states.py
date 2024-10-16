@@ -4,10 +4,13 @@ import curses
 import os
 import random
 import string
+import yaml
+import sys
+import io
 from typing import TYPE_CHECKING
 
 from clica.interface.base_state import CLIState
-from clica.interface.curses_utils import get_text_input, LineWriter, select_from_list
+from clica.interface.curses_utils import get_text_input, LineWriter, select_from_list, select_multiple_from_list
 from clica.interface.inputs import *
 from clica.database import ActionSource, ActionType
 from clica.problem_generation import generate_problem
@@ -47,7 +50,7 @@ class PromptState(CLIState):
     @staticmethod
     def _get_available_commands() -> dict[str, str]:
         return {
-            'ESC': '[ESC] menu'
+            'ESC': '[ESC] Menu'
         }
 
 
@@ -144,9 +147,9 @@ class ExampleState(CLIState):
     @staticmethod
     def _get_available_commands() -> dict[str, str]:
         return {
-            '^r': '[ctrl+r] run code',
-            '^KEY_RIGHT': '[ctrl+right] insert text',
-            'ESC': '[ESC] menu',
+            '^r': '[ctrl+r] Run code',
+            '^KEY_RIGHT': '[ctrl+right] Insert text',
+            'ESC': '[ESC] Menu',
         }
 
     @staticmethod
@@ -377,7 +380,7 @@ class LoadModelState(CLIState):
 
     @staticmethod
     def handle_execution(cli: InteractiveCLI) -> CLIState:
-        """Handles loading a saved model."""
+        """Handles loading one or more saved models."""
         if not cli.model_save_dir:
             cli.stdscr.clear()
             cli.stdscr.addstr(0, 0, "Error: model_save_dir not set in config")
@@ -395,30 +398,34 @@ class LoadModelState(CLIState):
             cli.stdscr.getch()
             return MenuState
 
-        selected_model, _ = select_from_list(cli.stdscr, model_files, 'Select a model to load:')
+        selected_models = select_multiple_from_list(cli.stdscr, model_files, 'Select models to load:')
 
-        if selected_model is None:
+        if not selected_models:
             return MenuState
 
-        full_path = os.path.join(cli.model_save_dir, selected_model)
-        
-        cli.stdscr.clear()
-        cli.stdscr.addstr(0, 0, f"Loading model '{selected_model}'...")
-        cli.stdscr.refresh()
-        
-        try:
-            cli.agent.load(full_path)
-            cli.loaded_model_name = selected_model
-        except Exception as e:
+        for selected_model in selected_models:
+            full_path = os.path.join(cli.model_save_dir, selected_model)
+            
             cli.stdscr.clear()
-            cli.stdscr.addstr(0, 0, f"Error loading model '{selected_model}': {str(e)}")
-            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.addstr(0, 0, f"Loading model '{selected_model}'...")
             cli.stdscr.refresh()
-            cli.stdscr.getch()
-            return MenuState
+            
+            try:
+                cli.agent.load(full_path)
+                cli.loaded_model_name = selected_model  # Note: This will only keep the last loaded model name
+            except Exception as e:
+                cli.stdscr.clear()
+                cli.stdscr.addstr(0, 0, f"Error loading model '{selected_model}': {str(e)}")
+                cli.stdscr.addstr(2, 0, "Press any key to continue...")
+                cli.stdscr.refresh()
+                cli.stdscr.getch()
+                continue  # Continue to the next model if there's an error
 
         cli.stdscr.clear()
-        cli.stdscr.addstr(0, 0, f"Model '{selected_model}' loaded!")
+        if len(selected_models) == 1:
+            cli.stdscr.addstr(0, 0, f"Model '{selected_models[0]}' loaded!")
+        else:
+            cli.stdscr.addstr(0, 0, f"{len(selected_models)} models loaded!")
         cli.stdscr.addstr(2, 0, "Press any key to continue...")
         cli.stdscr.refresh()
 
@@ -440,6 +447,85 @@ class ResetSessionState(CLIState):
         return MenuState
 
 
+class EvalState(CLIState):
+    state_id: str = 'EVAL'
+
+    @staticmethod
+    def handle_execution(cli: InteractiveCLI) -> CLIState:
+        """Handles the evaluation process."""
+        eval_data_path = cli.eval_data_path
+        cli.stdscr.clear()
+        
+        if not eval_data_path:
+            cli.stdscr.addstr(0, 0, "Error: eval_data_path not set in config")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
+        
+        if not os.path.exists(eval_data_path):
+            cli.stdscr.addstr(0, 0, f"Error: Invalid eval_data_path in config: {eval_data_path}")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
+
+        # Get list of eval items
+        eval_items = [
+            f.rsplit('.', 1)[0] for f in os.listdir(eval_data_path)
+            if os.path.exists(os.path.join(eval_data_path, f))
+        ]
+        
+        if not eval_items:
+            cli.stdscr.addstr(0, 0, "No eval options found.")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
+
+        selected_items = select_multiple_from_list(cli.stdscr, eval_items, 'Select evals to run:')
+
+        if not selected_items:
+            return MenuState
+
+        # Reset to shell mode so eval output is printed to terminal normally
+        cli.stdscr.refresh()
+        curses.savetty()
+        curses.reset_shell_mode()
+
+        # Run evaluations
+        results = {}
+        for item in selected_items:
+            # Clear the terminal and print the name of the eval
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print(f"\nRunning evaluation: {item}\n")
+            print("=" * 40)
+
+            try:
+                item_path = os.path.join(eval_data_path, item)
+                result = cli.agent.eval(item_path)
+                results[item] = result
+            except Exception as e:
+                results[item] = {"error": str(e)}
+
+        curses.resetty()
+
+        # Display results
+        cli.stdscr.clear()
+        writer = LineWriter(cli.stdscr)
+        for item, result in results.items():
+            writer.write(f"=== {item} ===", curses.A_BOLD)
+            for metric, value in result.items():
+                writer.write(f"{metric}: {value}")
+            writer.skip_lines(1)
+
+        writer.write("Press any key to continue...")
+        cli.stdscr.refresh()
+        cli.stdscr.getch()
+
+        return MenuState
+
+
 class MenuState(CLIState):
     state_id: str = 'MENU'
     key_to_state = {
@@ -457,6 +543,7 @@ class MenuState(CLIState):
         '\x1b': ExitState,
         '\x03': ExitState,
         'r': ResetSessionState,
+        'v': EvalState,  # Add this line
     }
     
     @staticmethod
@@ -497,13 +584,18 @@ class MenuState(CLIState):
     @staticmethod
     def _get_available_commands() -> dict[str, str]:
         return {
-            'p': '[p]rompt',
-            'e': '[e]xample',
-            't': '[t]rain',
-            's': '[s]ave model',
-            'l': '[l]oad model',
-            '+': '[+] reward',
-            '-': '[-] reward',
-            'ENTER': '[ENTER] end turn',
-            'r': '[r]eset session',  # Add this line
+            'p': '[P]rompt',
+            'e': '[E]xample',
+            't': '[T]rain',
+            's': '[S]ave model',
+            'l': '[L]oad model',
+            '+': '[+] Reward',
+            '-': '[-] Reward',
+            'ENTER': '[ENTER] End turn',
+            'r': '[R]eset session',
+            'v': 'E[v]aluate',  # Add this line
         }
+
+
+
+

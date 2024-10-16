@@ -171,7 +171,50 @@ def select_from_list(stdscr: curses.window, items: List[str], title: str, initia
             selected_index = (selected_index - 1) % len(items)
         elif key == curses.KEY_DOWN:
             selected_index = (selected_index + 1) % len(items)
-            
-    
-                
-    
+
+
+def select_multiple_from_list(stdscr: curses.window, items: List[str], title: str) -> List[str]:
+    """Displays a list of items with checkboxes and allows the user to select multiple items.
+
+    Args:
+        stdscr (curses.window): The curses window to write to.
+        items (List[str]): The list of items to display.
+        title (str): The title to display above the list.
+
+    Returns:
+        List[str]: A list of selected items.
+    """
+    selected = [False] * len(items)
+    cursor_index = 0
+
+    def render():
+        stdscr.clear()
+        writer = LineWriter(stdscr)
+        writer.write(title, curses.A_BOLD)
+        writer.skip_lines(1)
+
+        for i, item in enumerate(items):
+            checkbox = '[x]' if selected[i] else '[ ]'
+            if i == cursor_index:
+                writer.write(f'-> {checkbox} {item}', curses.A_REVERSE)
+            else:
+                writer.write(f'   {checkbox} {item}')
+
+        writer.skip_lines(2)
+        writer.write('[↑/↓] Navigate | [SPACE] Toggle | [ENTER] Confirm | [ESC] Cancel')
+        stdscr.refresh()
+
+    while True:
+        render()
+        key = stdscr.getch()
+
+        if key == ord('\n'):  # Enter key
+            return [item for item, is_selected in zip(items, selected) if is_selected]
+        elif key == 27:  # ESC key
+            return []
+        elif key == ord(' '):  # Space key
+            selected[cursor_index] = not selected[cursor_index]
+        elif key == curses.KEY_UP:
+            cursor_index = (cursor_index - 1) % len(items)
+        elif key == curses.KEY_DOWN:
+            cursor_index = (cursor_index + 1) % len(items)

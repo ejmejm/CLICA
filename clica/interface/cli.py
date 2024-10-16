@@ -26,6 +26,7 @@ class InteractiveCLI():
             supervised_train_mode: str = 'multi-token', # 'multi-token' or 'single-token'
             db_path: Optional[str] = 'data/interactions.db',
             model_save_dir: Optional[str] = None,
+            eval_data_path: Optional[str] = None,
         ):
         """Initializes the interactive CLI.
 
@@ -35,6 +36,7 @@ class InteractiveCLI():
         # agent. -> eos_token, max_gen_length, get_action(obs), train_supervised({obs, act})...
         self.agent = agent
         self.supervised_train_mode = supervised_train_mode
+        self.eval_data_path = eval_data_path
 
         env_kwargs = env_kwargs or {}
         self.env = make_env(**env_kwargs)
@@ -203,7 +205,6 @@ def test_cli(config: DictConfig):
         os.path.dirname(__file__),
         '../../data/test_interactions.db',
     )
-    print(db_path)
 
     agent = DummyAgent(None, tokenizer, max_gen_length=8)
     cli = InteractiveCLI(
@@ -211,6 +212,7 @@ def test_cli(config: DictConfig):
         make_env = InteractivePythonEnv,
         db_path = db_path,
         model_save_dir = config.get('model_save_dir'),
+        eval_data_path = config.get('eval_data_path'),
         env_kwargs = dict(
             tokenizer = agent.tokenizer,
             vocab = vocab,

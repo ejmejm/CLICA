@@ -1,3 +1,4 @@
-model_name: gpt2
+model_name: "deepseek-ai/deepseek-coder-1.3b-instruct" # gpt2
 device: cuda
 model_save_dir: ./models
+eval_data_path: ./data/eval

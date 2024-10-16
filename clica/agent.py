@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import os
 import logging
 import random
+import time
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import torch
@@ -97,6 +98,10 @@ class BaseAgent(nn.Module):
             The loss of the training step.
         """
         raise NotImplementedError
+    
+    def eval(self, path: str) -> Dict[str, Any]:
+        """Evaluates the model on the given data."""
+        raise NotImplementedError
 
     def save(self, path: str):
         """Save the state of the agent."""
@@ -130,6 +135,14 @@ class DummyAgent(BaseAgent):
     def get_action(self, state: RecurrentState, obs: List[int]) -> Tuple[RecurrentState, int]:
         """Returns a random action."""
         return (None, random.randint(0, len(self.tokenizer) - 1))
+    
+    def eval(self, path: str) -> Dict[str, Any]:
+        """Dummy eval function."""
+        print('Example print statement 1')
+        time.sleep(0.4)
+        print('Example print statement 2')
+        time.sleep(1)
+        return {'example_key': 1/3, 'example_key_2': 'example_value'}
 
 
 class TransformerAgent(BaseAgent):
