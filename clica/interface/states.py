@@ -50,7 +50,7 @@ class PromptState(CLIState):
     @staticmethod
     def _get_available_commands() -> dict[str, str]:
         return {
-            'ESC': '[ESC] Menu'
+            'ESC': '[ESC] menu'
         }
 
 
@@ -147,9 +147,9 @@ class ExampleState(CLIState):
     @staticmethod
     def _get_available_commands() -> dict[str, str]:
         return {
-            '^r': '[ctrl+r] Run code',
-            '^KEY_RIGHT': '[ctrl+right] Insert text',
-            'ESC': '[ESC] Menu',
+            '^r': '[ctrl+r] run code',
+            '^KEY_RIGHT': '[ctrl+right] insert text',
+            'ESC': '[ESC] menu',
         }
 
     @staticmethod
@@ -584,16 +584,16 @@ class MenuState(CLIState):
     @staticmethod
     def _get_available_commands() -> dict[str, str]:
         return {
-            'p': '[P]rompt',
-            'e': '[E]xample',
-            't': '[T]rain',
-            's': '[S]ave model',
-            'l': '[L]oad model',
-            '+': '[+] Reward',
-            '-': '[-] Reward',
-            'ENTER': '[ENTER] End turn',
-            'r': '[R]eset session',
-            'v': 'E[v]aluate',  # Add this line
+            'p': '[p]rompt',
+            'e': '[e]xample',
+            't': '[t]rain',
+            's': '[s]ave model',
+            'l': '[l]oad model',
+            '+': '[+] reward',
+            '-': '[-] reward',
+            'ENTER': '[ENTER] end turn',
+            'r': '[r]eset session',
+            'v': 'e[v]aluate',  # Add this line
         }
 
 

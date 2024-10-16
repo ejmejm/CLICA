@@ -156,7 +156,7 @@ def select_from_list(stdscr: curses.window, items: List[str], title: str, initia
                 writer.write(f'   {item}')
 
         writer.skip_lines(2)
-        writer.write('[↑/↓] Navigate | [ENTER] Select | [ESC] Cancel')
+        writer.write('[↑/↓] navigate | [ENTER] select | [ESC] cancel')
         stdscr.refresh()
 
     while True:
@@ -201,7 +201,7 @@ def select_multiple_from_list(stdscr: curses.window, items: List[str], title: st
                 writer.write(f'   {checkbox} {item}')
 
         writer.skip_lines(2)
-        writer.write('[↑/↓] Navigate | [SPACE] Toggle | [ENTER] Confirm | [ESC] Cancel')
+        writer.write('[↑/↓] navigate | [SPACE] toggle | [ENTER] confirm | [ESC] cancel')
         stdscr.refresh()
 
     while True:
