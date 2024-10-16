@@ -1,6 +1,6 @@
 import curses
 from curses.textpad import Textbox
-from typing import Optional, Union
+from typing import Optional, Union, List, Tuple
 
 
 class LineWriter():
@@ -127,3 +127,51 @@ def get_text_input(window: curses.window, initial_text: str = '') -> Optional[st
     text = textbox.gather().strip()
     
     return text if not escaped else None
+
+
+def select_from_list(stdscr: curses.window, items: List[str], title: str, initial_index: int = 0) -> Tuple[Optional[str], int]:
+    """Displays a list of items and allows the user to select one.
+
+    Args:
+        stdscr (curses.window): The curses window to write to.
+        items (List[str]): The list of items to display.
+        title (str): The title to display above the list.
+        initial_index (int, optional): The initial selected index. Defaults to 0.
+
+    Returns:
+        Tuple[Optional[str], int]: A tuple containing the selected item (or None if cancelled) and the selected index.
+    """
+    selected_index = initial_index
+
+    def render():
+        stdscr.clear()
+        writer = LineWriter(stdscr)
+        writer.write(title, curses.A_BOLD)
+        writer.skip_lines(1)
+
+        for i, item in enumerate(items):
+            if i == selected_index:
+                writer.write(f'-> {item}', curses.A_REVERSE)
+            else:
+                writer.write(f'   {item}')
+
+        writer.skip_lines(2)
+        writer.write('[↑/↓] Navigate | [ENTER] Select | [ESC] Cancel')
+        stdscr.refresh()
+
+    while True:
+        render()
+        key = stdscr.getch()
+
+        if key == ord('\n'):  # Enter key
+            return items[selected_index], selected_index
+        elif key == 27:  # ESC key
+            return None, None
+        elif key == curses.KEY_UP:
+            selected_index = (selected_index - 1) % len(items)
+        elif key == curses.KEY_DOWN:
+            selected_index = (selected_index + 1) % len(items)
+            
+    
+                
+    

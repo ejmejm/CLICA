@@ -7,7 +7,7 @@ import string
 from typing import TYPE_CHECKING
 
 from clica.interface.base_state import CLIState
-from clica.interface.curses_utils import get_text_input, LineWriter
+from clica.interface.curses_utils import get_text_input, LineWriter, select_from_list
 from clica.interface.inputs import *
 from clica.database import ActionSource, ActionType
 from clica.problem_generation import generate_problem
@@ -395,74 +395,35 @@ class LoadModelState(CLIState):
             cli.stdscr.getch()
             return MenuState
 
-        selected_index = 0
-        while True:
-            LoadModelState._render(cli, model_files, selected_index)
-            key = cli.stdscr.getch()
+        selected_model, _ = select_from_list(cli.stdscr, model_files, 'Select a model to load:')
 
-            if key == ord('\n'):  # Enter key
-                selected_model = model_files[selected_index]
-                full_path = os.path.join(cli.model_save_dir, selected_model)
-                
-                cli.stdscr.clear()
-                cli.stdscr.addstr(0, 0, f"Loading model '{selected_model}'...")
-                cli.stdscr.refresh()
-                
-                try:
-                    cli.agent.load(full_path)
-                    cli.loaded_model_name = selected_model
-                except Exception as e:
-                    cli.stdscr.clear()
-                    cli.stdscr.addstr(0, 0, f"Error loading model '{selected_model}': {str(e)}")
-                    cli.stdscr.addstr(2, 0, "Press any key to continue...")
-                    cli.stdscr.refresh()
-                    cli.stdscr.getch()
-                    return MenuState
+        if selected_model is None:
+            return MenuState
 
-                cli.stdscr.clear()
-                cli.stdscr.addstr(0, 0, f"Model '{selected_model}' loaded!")
-                cli.stdscr.addstr(2, 0, "Press any key to continue...")
-                cli.stdscr.refresh()
-
-                cli.stdscr.getch()
-                return MenuState
-
-            elif key == 27:  # 'q' or ESC key
-                return MenuState
-
-            elif key == curses.KEY_UP:
-                selected_index = (selected_index - 1) % len(model_files)
-
-            elif key == curses.KEY_DOWN:
-                selected_index = (selected_index + 1) % len(model_files)
-
-    @staticmethod
-    def _render(cli: InteractiveCLI, model_files: list[str], selected_index: int):
-        """Renders the list of saved models."""
+        full_path = os.path.join(cli.model_save_dir, selected_model)
+        
         cli.stdscr.clear()
+        cli.stdscr.addstr(0, 0, f"Loading model '{selected_model}'...")
+        cli.stdscr.refresh()
+        
+        try:
+            cli.agent.load(full_path)
+            cli.loaded_model_name = selected_model
+        except Exception as e:
+            cli.stdscr.clear()
+            cli.stdscr.addstr(0, 0, f"Error loading model '{selected_model}': {str(e)}")
+            cli.stdscr.addstr(2, 0, "Press any key to continue...")
+            cli.stdscr.refresh()
+            cli.stdscr.getch()
+            return MenuState
 
-        writer = LineWriter(cli.stdscr)
-        writer.write('Select a model to load:', curses.A_BOLD)
-        writer.skip_lines(1)
-
-        for i, model in enumerate(model_files):
-            if i == selected_index:
-                writer.write(f'-> {model}', curses.A_REVERSE)
-            else:
-                writer.write(f'   {model}')
-
-        writer.skip_lines(2)
-        cli._write_command_menu_to_screen(writer)
-
+        cli.stdscr.clear()
+        cli.stdscr.addstr(0, 0, f"Model '{selected_model}' loaded!")
+        cli.stdscr.addstr(2, 0, "Press any key to continue...")
         cli.stdscr.refresh()
 
-    @staticmethod
-    def _get_available_commands() -> dict[str, str]:
-        return {
-            '↑/↓': '[↑/↓] Navigate',
-            'ENTER': '[ENTER] Load',
-            'ESC': '[ESC] Cancel'
-        }
+        cli.stdscr.getch()
+        return MenuState
 
 
 class ResetSessionState(CLIState):
