@@ -32,6 +32,7 @@ class InteractionDatabase:
         self.current_session_id: Optional[int] = None
         self.current_action_id: Optional[int] = None
         self.autosave_interval: int = autosave_interval
+        self.last_action: Optional[str] = None
         self.start_autosave()
 
     def create_tables(self) -> None:
@@ -97,6 +98,7 @@ class InteractionDatabase:
                 INSERT INTO actions (action_uuid, session_id, action_id, action_type, action, correct, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (str(uuid.uuid4()), session_id, action_id, action_type.value, action, correct, source.value))
+            self.last_action = action
 
     def set_session_verified(self, session_id: Optional[int] = None) -> None:
         if session_id is None:
@@ -188,6 +190,37 @@ class InteractionDatabase:
                 ORDER BY action_id
             """, (self.current_session_id, action_id))
             return self.cursor.fetchall()
+
+    def reverse_last_action(self) -> bool:
+        """
+        Reverses the most recent call to add_action by removing the last action from the database.
+
+        Returns:
+            bool: True if an action was successfully reversed, False otherwise.
+        """
+        with self.lock:
+            self.cursor.execute("""
+                SELECT action_id, session_id
+                FROM actions
+                WHERE session_id = ?
+                AND action_id = ?
+                LIMIT 1
+            """, (self.current_session_id, self.current_action_id))
+            result = self.cursor.fetchone()
+
+            if result is None:
+                return False
+
+            last_action_id, session_id = result
+
+            self.cursor.execute("""
+                DELETE FROM actions
+                WHERE session_id = ? AND action_id = ?
+            """, (session_id, last_action_id))
+
+            self.conn.commit()
+            self.current_action_id -= 1
+            return True
 
 
 # Usage example:

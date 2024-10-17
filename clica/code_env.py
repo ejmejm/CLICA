@@ -133,7 +133,7 @@ class InteractivePythonEnv(gym.Env):
     """
     if action in self._command_token_ids:
       self._apply_command(action)
-    elif action == self._tokenizer.eos_token:
+    elif action == self._tokenizer.eos_token_id:
       pass
     else:
       self._text_queue.append(action)

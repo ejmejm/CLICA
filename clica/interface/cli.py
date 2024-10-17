@@ -15,6 +15,9 @@ from clica.interface.inputs import *
 from clica.interface.states import MenuState
 
 
+STATE_HISTORY_LENGTH = 10
+
+
 class InteractiveCLI():
     """CLI to interactively train an agent."""
 
@@ -44,6 +47,7 @@ class InteractiveCLI():
         self.user_feedback = ''
         self.curr_reward = 0
         self.state = MenuState
+        self.state_history = [self.state] # Index 0 is the current state, index STATE_HISTORY_LENGTH - 1 is the oldest state
         
         self._use_db = db_path is not None
         if self._use_db:
@@ -158,6 +162,8 @@ class InteractiveCLI():
         
         while self.state != None:
             self.state = self.state.handle_execution(self)
+            if self.state != self.state_history[0]:
+                self.state_history = [self.state] + self.state_history[:STATE_HISTORY_LENGTH - 1]
 
         self.db.close()
 
