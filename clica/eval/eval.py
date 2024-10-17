@@ -7,7 +7,7 @@ from clica.code_env import InteractivePythonEnv
 from clica.eval.human_eval import run_human_eval
 
 
-def run_human_eval_from_task_path(agent: BaseAgent, task_path: str) -> Dict[str, Any]:
+def run_human_eval_from_task_path(agent: BaseAgent, task_path: str, bug_fixes: bool = False) -> Dict[str, Any]:
     # If task_path is a file, check if it's a .jsonl file
     if os.path.isfile(task_path):
         if not task_path.endswith('.jsonl'):
@@ -27,7 +27,7 @@ def run_human_eval_from_task_path(agent: BaseAgent, task_path: str) -> Dict[str,
     )
 
     # Run human eval
-    eval_results = run_human_eval(data_path, agent, env)
+    eval_results = run_human_eval(data_path, agent, env, bug_fixes=bug_fixes)
     return eval_results
 
 
@@ -56,6 +56,8 @@ def run_agent_eval(agent: BaseAgent, task_path: str, eval_type: Optional[str] = 
     # Run the appropriate eval
     if eval_type == 'human_eval':
         eval_results = run_human_eval_from_task_path(agent, task_path)
+    elif eval_type == 'bug_fixes':
+        eval_results = run_human_eval_from_task_path(agent, task_path, bug_fixes=True)
     else:
         raise ValueError(f"Eval type '{eval_type}' not supported!")
 

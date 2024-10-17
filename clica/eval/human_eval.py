@@ -17,19 +17,36 @@ BENCHMARK_OUTPUT_DIR = '.benchmark_outputs/'
 N_WORKERS = 4
 
 
-def generate_human_eval_completion(prompt: str, agent: BaseAgent, env: InteractivePythonEnv):
+def generate_human_eval_completion(problem: Dict[str, Any], agent: BaseAgent, env: InteractivePythonEnv, bug_fixes: bool = False):
     env.reset()
-    
+
     # Start by entering the code in the prompt
+    prompt = problem['prompt']
     prompt_token_ids = agent.tokenizer.encode(prompt, add_special_tokens=False)
+    enter_token_id = agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN)
+    prompt_token_ids = prompt_token_ids + [enter_token_id]
+
     for token_id in prompt_token_ids:
         env.step(token_id)
-    env.step(agent.tokenizer.convert_tokens_to_ids(KEY_ENTER_TOKEN))
-    
+
     # Set the instruction
-    instruction_ids = agent.tokenizer.encode("Finish writing the function")
+    if bug_fixes:
+        instruction_ids = agent.tokenizer.encode(
+            "Complete the function and ensure it is correct", add_special_tokens=False)
+    else:
+        instruction_ids = agent.tokenizer.encode(
+            "Finish writing the function", add_special_tokens=False)
+
     env.set_instruction(instruction_ids)
-    
+
+    # Start with an incorrect solution if the goal is to start from a solution with a bug
+    if bug_fixes:
+        incorrect_solution = problem['incorrect_solution']
+        incorrect_solution_ids = agent.tokenizer.encode(incorrect_solution, add_special_tokens=False)  
+
+    for token_id in incorrect_solution_ids:
+        env.step(token_id)
+
     # Now prompt the agent to generate the rest of the code
     # TODO: Note that there is a big difference between the agent starting with an empty recurrent state and
     # passing all the prompt actions into the recurrent state.
@@ -38,17 +55,23 @@ def generate_human_eval_completion(prompt: str, agent: BaseAgent, env: Interacti
     # Currently, that is not being done here to save a little on compute, but it really should be done in the future.
     state = None
     agent.execute_action_loop(state, env)
-    
+
     solution_token_ids = env.get_dict_obs(include_cursor=False)['code']
     solution_text = agent.tokenizer.decode(solution_token_ids)
-    
+
     return solution_text
 
 
-def run_human_eval(data_path: str, agent: BaseAgent, env: InteractivePythonEnv, n_samples_per_task: int = 1):
+def run_human_eval(
+    data_path: str,
+    agent: BaseAgent,
+    env: InteractivePythonEnv,
+    n_samples_per_task: int = 1,
+    bug_fixes: bool = False,
+):
     problems = read_problems(data_path)
     samples = [
-        dict(task_id=task_id, completion=generate_human_eval_completion(problems[task_id]['prompt'], agent, env))
+        dict(task_id=task_id, completion=generate_human_eval_completion(problems[task_id], agent, env, bug_fixes))
         for task_id in problems
         for _ in range(n_samples_per_task)
     ]
