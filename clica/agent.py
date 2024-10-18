@@ -1,10 +1,10 @@
-from dataclasses import dataclass
 import os
 import logging
 import random
 import time
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+from datasets import Dataset
 import torch
 from torch import nn
 from transformers import (
@@ -14,13 +14,10 @@ from transformers import (
     PreTrainedTokenizer,
     StoppingCriteria,
     StoppingCriteriaList,
-    TrainingArguments,
-    Trainer,
 )
-from datasets import Dataset
 
 from clica.code_env import InteractivePythonEnv, COMMAND_TOKENS
-from clica.database import ActionType
+from clica.training.training import train_on_sessions, train_on_actions
 
 
 IGNORE_INDEX = -100
@@ -40,29 +37,6 @@ class StopOnTokens(StoppingCriteria):
         if input_ids[0][-1] in self.stop_tokens:
             return True
         return False
-
-
-@dataclass
-class DataCollatorForSupervisedDataset(object):
-    """Collate examples for supervised fine-tuning."""
-    tokenizer: PreTrainedTokenizer
-
-    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        input_ids, labels = tuple(
-            [instance[key] for instance in instances] for key in ('input_ids', 'labels'))
-        input_ids = [torch.tensor(x) for x in input_ids]
-        input_ids = torch.nn.utils.rnn.pad_sequence(
-            input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-
-        labels = [torch.tensor(x) for x in labels]
-        labels = torch.nn.utils.rnn.pad_sequence(
-            labels, batch_first=True, padding_value=IGNORE_INDEX)
-
-        return dict(
-            input_ids = input_ids,
-            labels = labels,
-            attention_mask = input_ids.ne(self.tokenizer.pad_token_id), # TODO: Is this not also checking for IGNORE_INDEX a bug?
-        )
 
 
 class BaseAgent(nn.Module):
@@ -194,6 +168,15 @@ class TransformerAgent(BaseAgent):
     def reset_action_queue(self):
         self.action_queue = []
 
+    def train_on_sessions(self, sessions: List[Dict[str, Any]]):
+        """
+        Trains the agent on multiple sequences of actions from different sessions.
+
+        Args:
+            sessions: A list of dictionaries, each containing session data.
+        """
+        self.model = train_on_sessions(self.model, self.tokenizer, sessions)
+
     def train_on_actions(self, env, actions: List[Tuple[int, str, str, Optional[bool]]]):
         """
         Trains the agent on a list of actions using the HuggingFace Trainer.
@@ -202,65 +185,7 @@ class TransformerAgent(BaseAgent):
             env: The environment to use for generating observations.
             actions: A list of tuples containing (action_id, action, action_type, correct).
         """
-        train_data = []
-
-        for action_idx, action, action_type, correct in actions:
-            obs = env.get_obs()
-            action_token_ids = self.tokenizer.encode(action, add_special_tokens=False)
-
-            # Handle setting the instruction, code, exec output actions
-            if action_type == ActionType.SET_INSTRUCTION.value:
-                env.set_instruction(action_token_ids)
-            elif action_type == ActionType.SET_CODE.value:
-                env.set_code(action_token_ids)
-            elif action_type == ActionType.SET_EXEC_OUTPUT.value:
-                env.set_exec_output(action_token_ids)
-            
-            # Handle input actions
-            elif action_type == ActionType.INPUT.value:
-                # Add to training data if not incorrect
-                if correct != False:
-                    input_ids = obs + action_token_ids
-                    labels = [IGNORE_INDEX] * len(obs) + action_token_ids
-
-                    train_data.append({
-                        "input_ids": input_ids,
-                        "labels": labels,
-                    })
-                
-                # Enact each action in the environment
-                for token_id in action_token_ids:
-                    env.step(token_id)
-
-        # Create a Dataset from the training data
-        dataset = Dataset.from_list(train_data)
-
-        # Define training arguments
-        training_args = TrainingArguments(
-            output_dir = './results',
-            num_train_epochs = 2,
-            per_device_train_batch_size = 4,
-            logging_dir = './logs',
-            logging_steps = 10,
-        )
-
-        # Create and run the Trainer
-        trainer = Trainer(
-            model = self.model,
-            args = training_args,
-            train_dataset = dataset,
-            data_collator = DataCollatorForSupervisedDataset(self.tokenizer),
-        )
-
-        # Set up logging to file
-        trainer.train()
-
-        # Update the model reference
-        self.model = trainer.model
-        
-        del trainer
-        torch.cuda.empty_cache()
-        
+        self.model, env = train_on_actions(self.model, self.tokenizer, env, actions)
         return env
 
 

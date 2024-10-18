@@ -306,7 +306,7 @@ class TrainState(CLIState):
         return MenuState
         
     @staticmethod
-    def train_agent(cli: InteractiveCLI):
+    def train_on_recent_actions(cli: InteractiveCLI):
         """
         Trains the agent using actions since the last training session.
         """
@@ -323,6 +323,19 @@ class TrainState(CLIState):
         # Update the last trained action ID and environment state
         cli.last_trained_step = actions[-1][0]
         cli.last_trained_env_state = copy.deepcopy(cli.env)
+
+    @staticmethod
+    def train_on_all_verified_sessions(cli: InteractiveCLI):
+        """
+        Trains the agent using actions from all verified sessions.
+        """
+        session_data = cli.db.get_all_verified_session_actions()
+        if not session_data:
+            return
+
+        # Create a copy of the environment state from the last training session
+        
+        
         
     @staticmethod
     def _render(cli: InteractiveCLI):

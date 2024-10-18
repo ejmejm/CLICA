@@ -188,7 +188,7 @@ class InteractionDatabase:
             action_id (int): The action_id to start from (exclusive).
 
         Returns:
-            List[Tuple[int, str, str]]: A list of tuples containing (action_id, action, action_type)
+            List[Tuple[int, str, str, Optional[bool]]]: A list of tuples containing (action_id, action, action_type, correct)
         """
         with self.lock:
             self.cursor.execute("""
@@ -198,6 +198,46 @@ class InteractionDatabase:
                 ORDER BY action_id
             """, (self.current_session_id, action_id))
             return self.cursor.fetchall()
+
+    def get_all_verified_session_data(self) -> dict[int, dict]:
+        """
+        Retrieves all actions from all verified sessions.
+
+        Returns:
+            dict[int, dict]: A dictionary that maps session_id to a dictionary containing
+                             'initial_instruction', 'initial_code', 'initial_exec_output',
+                             and 'actions' (list of tuples containing action_id, action, action_type, correct).
+        """
+        with self.lock:
+            # First, get all verified sessions
+            self.cursor.execute("""
+                SELECT session_id, initial_instruction, initial_code, initial_exec_output
+                FROM sessions
+                WHERE verified = 1
+            """)
+            sessions = self.cursor.fetchall()
+
+            result = {}
+            for session in sessions:
+                session_id, initial_instruction, initial_code, initial_exec_output = session
+                
+                # Get all actions for this session
+                self.cursor.execute("""
+                    SELECT action_id, action, action_type, correct
+                    FROM actions
+                    WHERE session_id = ?
+                    ORDER BY action_id
+                """, (session_id,))
+                actions = self.cursor.fetchall()
+
+                result[session_id] = {
+                    'initial_instruction': initial_instruction,
+                    'initial_code': initial_code,
+                    'initial_exec_output': initial_exec_output,
+                    'actions': actions
+                }
+
+            return result
 
     def reverse_last_action(self) -> bool:
         """
