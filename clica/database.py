@@ -1,4 +1,6 @@
 from enum import Enum
+import os
+import signal
 import threading
 import uuid
 
@@ -106,6 +108,7 @@ class InteractionDatabase:
         
         with self.lock:
             self.cursor.execute("UPDATE sessions SET verified = ? WHERE session_id = ?", (True, session_id))
+            self.conn.commit()
 
     def get_total_sessions(self) -> int:
         self.cursor.execute("SELECT COUNT(*) FROM sessions")
@@ -153,10 +156,14 @@ class InteractionDatabase:
         actions_dataset.save_to_disk(f"{output_path}/actions")
 
     def autosave(self) -> None:
+        time_of_last_save = time.time()
+        
         while self.run_autosave_thread:
-            with self.lock:
-                self.conn.commit()
-            time.sleep(self.autosave_interval)
+            if time.time() - time_of_last_save >= self.autosave_interval:
+                with self.lock:
+                    self.conn.commit()
+                time_of_last_save = time.time()
+            time.sleep(0.2)
 
     def start_autosave(self) -> None:
         self.run_autosave_thread = True
@@ -166,6 +173,7 @@ class InteractionDatabase:
     def close(self) -> None:
         # Send signal to stop autosave thread
         self.run_autosave_thread = False
+        self.autosave_thread.join(timeout=0.5)
         # Save any remaining data
         with self.lock:
             self.conn.commit()
