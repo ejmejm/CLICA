@@ -542,24 +542,51 @@ class EvalState(CLIState):
         return MenuState
 
 
+class VerifyState(CLIState):
+    state_id: str = 'VERIFY'
+
+    @staticmethod
+    def handle_execution(cli: InteractiveCLI) -> CLIState:
+        """Marks the current session as verified in the database."""
+        cli.stdscr.clear()
+        writer = LineWriter(cli.stdscr)
+        
+        if cli._use_db and cli.db.current_session_id is not None:
+            cli.db.set_session_verified()
+            writer.write("Current session marked as verified.", curses.A_BOLD)
+        else:
+            writer.write("No active session to verify.", curses.A_BOLD)
+        
+        writer.skip_lines(2)
+        writer.write("Press any key to return to the menu...")
+        cli.stdscr.refresh()
+        cli.stdscr.getch()
+        return MenuState
+
+    @staticmethod
+    def _render(cli: InteractiveCLI):
+        pass
+
+
 class MenuState(CLIState):
     state_id: str = 'MENU'
     key_to_state = {
         'p': PromptState,
         KEY_CTRL_P: AutoPromptState,
         ',': AutoPromptState,
-        'e': ExampleState,
+        'c': ExampleState,
         't': TrainState,
         's': SaveModelState,
         'l': LoadModelState,
         '\n': AgentTurnState,
         '\r': AgentTurnState,
-        KEY_CTRL_E: AutoSolveState,
+        KEY_CTRL_C: AutoSolveState,
         '.': AutoSolveState,
         '\x1b': ExitState,
         '\x03': ExitState,
         'r': ResetSessionState,
-        'v': EvalState,  # Add this line
+        'e': EvalState,
+        'v': VerifyState,  # Add this line
     }
     
     @staticmethod
@@ -601,7 +628,7 @@ class MenuState(CLIState):
     def _get_available_commands() -> dict[str, str]:
         return {
             'p': '[p]rompt',
-            'e': '[e]xample',
+            'c': '[c]ode',
             't': '[t]rain',
             's': '[s]ave model',
             'l': '[l]oad model',
@@ -609,8 +636,10 @@ class MenuState(CLIState):
             '-': '[-] reward',
             'ENTER': '[ENTER] end turn',
             'r': '[r]eset session',
-            'v': 'e[v]aluate',  # Add this line
+            'e': '[e]valuate',
+            'v': '[v]erify session',
         }
+
 
 
 

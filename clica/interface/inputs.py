@@ -55,4 +55,5 @@ SPECIAL_KEY_TO_TOKEN_MAP = {
 }
 
 KEY_CTRL_P = control_key('p')
+KEY_CTRL_C = control_key('c')
 KEY_CTRL_E = control_key('e')
