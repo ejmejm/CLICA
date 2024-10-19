@@ -10,12 +10,13 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from transformers import PreTrainedTokenizer, Trainer, TrainingArguments
 
-from clica.code_env import InteractivePythonEnv
+from clica.code_env import COMMAND_TOKENS, KEY_ENTER_TOKEN, InteractivePythonEnv
 from clica.database import ActionType
 from clica.training.trainer import SequentialDataloader
 
 
 IGNORE_INDEX = -100
+EOS_TOKENS = {'<|EOS|>', '<|end_of_sentence|>'}
 
 
 @dataclass
@@ -40,7 +41,7 @@ class DataCollatorForSupervisedDataset(object):
         )
 
 
-def create_session_dataset(session, tokenizer):
+def create_session_dataset(session: Dict[str, Any], tokenizer: PreTrainedTokenizer):
     """
     Creates a dataset from a single session.
 
@@ -51,22 +52,30 @@ def create_session_dataset(session, tokenizer):
     Returns:
         A list of dictionaries containing input_ids and labels for each step in the session.
     """
+    non_text_tokens = COMMAND_TOKENS.union({tokenizer.eos_token})
+    
     # First pass: Combine consecutive input actions
     combined_actions = []
+    was_last_action_text = False
     for action_id, action, action_type, correct in session['actions']:
-        if action_type == ActionType.INPUT.value:
-            if correct == False:
-                continue
-            
-            if combined_actions and combined_actions[-1][2] == ActionType.INPUT.value:
-                combined_actions[-1] = (action_id, combined_actions[-1][1] + action, ActionType.INPUT.value, None)
-            else:
-                combined_actions.append((action_id, action, ActionType.INPUT.value, None))
+        if action in EOS_TOKENS:
+            action = tokenizer.eos_token
+        
+        if correct == False:
+            continue
+        
+        is_action_text = action_type == ActionType.INPUT.value and action not in non_text_tokens
+
+        # Combine consecutive input actions if the previous one was text
+        if combined_actions and action_type == ActionType.INPUT.value and was_last_action_text:
+            combined_actions[-1] = (action_id, combined_actions[-1][1] + action, action_type, None)
         else:
             combined_actions.append((action_id, action, action_type, correct))
 
+        was_last_action_text = is_action_text
+
     # Second pass: Create input_ids and labels
-    env = InteractivePythonEnv()
+    env = InteractivePythonEnv(tokenizer)
     env.set_instruction(tokenizer.encode(session['initial_instruction'], add_special_tokens=False))
     env.set_code(tokenizer.encode(session['initial_code'], add_special_tokens=False))
     env.set_exec_output(tokenizer.encode(session['initial_exec_output'], add_special_tokens=False))
@@ -122,9 +131,12 @@ def train_on_sessions(
         tokenizer: The tokenizer to use.
         sessions: A list of dictionaries, each containing session data.
     """
-    all_sequences = [create_session_dataset(session, tokenizer) for session in sessions]
+    all_sequences = [create_session_dataset(session, tokenizer) for session in sessions.values()]
+    # TODO: Dataset must be a list of dictionaries. To do this, we can flatten all_sequences,
+    # but then also store the indices of the starts of each sequence. When we sample, we can sample
+    # just from those indices, and then grab data from there to the end of the sequence.
     dataset = Dataset.from_list(all_sequences)
-    dataset = IterableDataset(dataset)
+    # dataset = IterableDataset(dataset)
 
     dataloader = SequentialDataloader(
         dataset,
@@ -165,6 +177,7 @@ def train_on_sessions(
                 
                 accelerator.backward(loss)
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
             curr_iter += 1
 

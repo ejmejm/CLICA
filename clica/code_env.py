@@ -1,6 +1,6 @@
 from io import StringIO
 from contextlib import redirect_stdout
-from typing import Dict, List, Tuple
+from typing import Dict, List, Sequence, Tuple
 import traceback
 
 import gymnasium as gym
@@ -80,11 +80,11 @@ class InteractivePythonEnv(gym.Env):
 
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, tokenizer: PreTrainedTokenizer, vocab: Dict[str, int]):
+  def __init__(self, tokenizer: PreTrainedTokenizer):
     super(InteractivePythonEnv, self).__init__()
 
     self._tokenizer = tokenizer
-    self._vocab = vocab # Maps token string to token id
+    self._vocab = tokenizer.get_vocab() # Maps token string to token id
     
     self._check_command_tokens_in_vocab()
     # Maps command token id to the token string
@@ -288,37 +288,39 @@ class InteractivePythonEnv(gym.Env):
     self._instruction = instruction
 
 
-def add_and_init_special_token(token: str, tokenizer: PreTrainedTokenizer, model: PreTrainedModel = None):
+def add_and_init_special_tokens(tokens: Sequence[str], tokenizer: PreTrainedTokenizer, model: PreTrainedModel = None):
   """Add a custom token to the tokenizer and model."""
-  
-  # Add the new token to the tokenizer
+  tokens = list(tokens)
   
   if model is not None:
-    # Tokenize the components of the custom token
-    components = tokenizer.tokenize(token)  # Remove <|...|>
-    
-    # Get the embeddings of the component tokens
-    with torch.no_grad():
-      component_ids = tokenizer.convert_tokens_to_ids(components)
-      component_embeddings = model.get_input_embeddings()(torch.tensor(component_ids))
-    
-    # Calculate the sum of component embeddings
-    new_embedding = component_embeddings.mean(dim=0)
-    
-    # Normalize the new embedding to match the expected magnitude
-    with torch.no_grad():
-      existing_embeddings = model.get_input_embeddings().weight.data
-      avg_norm = existing_embeddings.norm(dim=1).mean()
-      new_embedding = F.normalize(new_embedding, dim=0) * avg_norm
+    all_new_embeddings = []
+    for token in tokens:
+      # Tokenize the components of the custom token
+      components = tokenizer.tokenize(token)  # Remove <|...|>
+      
+      # Get the embeddings of the component tokens
+      with torch.no_grad():
+        component_ids = tokenizer.convert_tokens_to_ids(components)
+        component_embeddings = model.get_input_embeddings()(torch.tensor(component_ids))
+      
+      # Calculate the sum of component embeddings
+      new_embedding = component_embeddings.mean(dim=0)
+      
+      # Normalize the new embedding to match the expected magnitude
+      with torch.no_grad():
+        existing_embeddings = model.get_input_embeddings().weight.data
+        avg_norm = existing_embeddings.norm(dim=1).mean()
+        new_embedding = F.normalize(new_embedding, dim=0) * avg_norm
+        all_new_embeddings.append(new_embedding)
 
-  num_added_tokens = tokenizer.add_special_tokens({"additional_special_tokens": [token]})
+  num_added_tokens = tokenizer.add_special_tokens({"additional_special_tokens": tokens})
   
   if model is not None:
     # Resize the model's token embeddings
     model.resize_token_embeddings(len(tokenizer))
     
     # Set the embedding for the new token
-    model.get_input_embeddings().weight.data[-1] = new_embedding
+    model.get_input_embeddings().weight.data[-num_added_tokens:] = torch.stack(all_new_embeddings)
 
   return num_added_tokens
 
@@ -332,13 +334,12 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     
     # Add special tokens
-    for token in ENV_SPECIAL_TOKENS:
-      add_and_init_special_token(token, tokenizer, model)
+    add_and_init_special_tokens(ENV_SPECIAL_TOKENS, tokenizer, model)
       
     vocab = tokenizer.get_vocab()
 
     # Create environment
-    env = InteractivePythonEnv(tokenizer, vocab)
+    env = InteractivePythonEnv(tokenizer)
 
     # Test reset
     obs = env.reset()

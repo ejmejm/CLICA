@@ -21,10 +21,7 @@ def run_human_eval_from_task_path(agent: BaseAgent, task_path: str, bug_fixes: b
             raise ValueError(f"No .jsonl file found for human eval in directory {task_path}")
         data_path = os.path.join(task_path, jsonl_files[0])
 
-    env = InteractivePythonEnv(
-        tokenizer = agent.tokenizer,
-        vocab = agent.tokenizer.get_vocab(),
-    )
+    env = InteractivePythonEnv(agent.tokenizer)
 
     # Run human eval
     eval_results = run_human_eval(data_path, agent, env, bug_fixes=bug_fixes)

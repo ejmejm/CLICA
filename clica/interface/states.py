@@ -8,7 +8,13 @@ import traceback
 from typing import TYPE_CHECKING
 
 from clica.interface.base_state import CLIState
-from clica.interface.curses_utils import get_text_input, LineWriter, select_from_list, select_multiple_from_list
+from clica.interface.curses_utils import (
+    get_text_input,
+    LineWriter,
+    select_from_list,
+    select_multiple_from_list,
+    shell_mode,
+)
 from clica.interface.inputs import *
 from clica.database import ActionSource, ActionType
 from clica.eval import run_agent_eval
@@ -127,6 +133,8 @@ class ExampleState(CLIState):
                     cli.insert_queue = ''
                     for act in actions:
                         cli._env_enact(act, ActionSource.HUMAN)
+                else:
+                    cli._env_enact(cli.agent.tokenizer.eos_token_id, ActionSource.HUMAN)
                 break
             elif key == 'KEY_RESIZE':
                 continue
@@ -295,14 +303,25 @@ class TrainState(CLIState):
         cli.stdscr.clear()
         cli.stdscr.refresh()
 
-        TrainState.train_agent(cli)
+        training_options = ['Train on recent actions', 'Train on all verified sessions']
+        option, option_idx = select_from_list(cli.stdscr, training_options, 'Select training option:')
 
-        print()
-        print('=' * 40)
-        print()
-        print("Training complete, press any key to return to the menu...")
+        if not option:
+            return MenuState
 
-        cli.stdscr.getkey()
+        cli.stdscr.clear()
+        cli.stdscr.refresh()
+
+        with shell_mode():
+            if option == 'Train on recent actions':
+                TrainState.train_on_recent_actions(cli)
+            elif option == 'Train on all verified sessions':
+                TrainState.train_on_all_verified_sessions(cli)
+
+        cli.stdscr.clear()
+        cli.stdscr.addstr(0, 0, "Training complete, press any key to return to the menu...")
+        cli.stdscr.refresh()
+        cli.stdscr.getch()
         return MenuState
         
     @staticmethod
@@ -329,17 +348,10 @@ class TrainState(CLIState):
         """
         Trains the agent using actions from all verified sessions.
         """
-        session_data = cli.db.get_all_verified_session_actions()
+        session_data = cli.db.get_all_verified_session_data()
         if not session_data:
             return
-
-        # Create a copy of the environment state from the last training session
-        
-        
-        
-    @staticmethod
-    def _render(cli: InteractiveCLI):
-        pass
+        cli.agent.train_on_sessions(session_data)
 
 
 class SaveModelState(CLIState):
@@ -515,29 +527,26 @@ class EvalState(CLIState):
 
         # Reset to shell mode so eval output is printed to terminal normally
         cli.stdscr.refresh()
-        curses.savetty()
-        curses.reset_shell_mode()
 
-        # Run evaluations
-        results = {}
-        for item in selected_items:
-            # Clear the terminal and print the name of the eval
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(f"\nRunning evaluation: {item}\n")
-            print("=" * 40)
+        with shell_mode():
+            # Run evaluations
+            results = {}
+            for item in selected_items:
+                # Clear the terminal and print the name of the eval
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print(f"\nRunning evaluation: {item}\n")
+                print("=" * 40)
 
-            try:
-                item_path = os.path.join(eval_data_path, item)
-                result = run_agent_eval(cli.agent, item_path)
-                results[item] = result
-            except Exception as e:
-                stack_trace = traceback.format_exc()
-                results[item] = {
-                    "error": str(e),
-                    "stack_trace": stack_trace
-                }
-
-        curses.resetty()
+                try:
+                    item_path = os.path.join(eval_data_path, item)
+                    result = run_agent_eval(cli.agent, item_path)
+                    results[item] = result
+                except Exception as e:
+                    stack_trace = traceback.format_exc()
+                    results[item] = {
+                        "error": str(e),
+                        "stack_trace": stack_trace
+                    }
 
         # Display results
         cli.stdscr.clear()

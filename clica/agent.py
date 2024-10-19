@@ -77,17 +77,6 @@ class BaseAgent(nn.Module):
                 break
         return actions
 
-    def train_supervised(self, buffer: Tuple[List[int], List[int]]) -> float:
-        """Trains the model on the given observations and actions.
-
-        Args:
-            buffer: A dictionary containing the observations and actions.
-
-        Returns:
-            The loss of the training step.
-        """
-        raise NotImplementedError
-
     def save(self, path: str):
         """Save the state of the agent."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -106,6 +95,15 @@ class BaseAgent(nn.Module):
         Args:
             env: The environment to use for generating observations.
             actions: A list of tuples containing (action_id, action, action_type).
+        """
+        raise NotImplementedError
+
+    def train_on_sessions(self, sessions: List[Dict[str, Any]]):
+        """
+        Trains the agent on multiple sequences of actions from different sessions.
+
+        Args:
+            sessions: A list of dictionaries, each containing session data.
         """
         raise NotImplementedError
 

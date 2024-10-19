@@ -230,16 +230,15 @@ if __name__ == '__main__':
 
     print('\nTesting get_actions_from_diff function:')
     from transformers import AutoTokenizer
-    from clica.code_env import add_and_init_special_token, InteractivePythonEnv, ENV_SPECIAL_TOKENS
+    from clica.code_env import add_and_init_special_tokens, InteractivePythonEnv, ENV_SPECIAL_TOKENS
 
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
-    for token in ENV_SPECIAL_TOKENS:
-        add_and_init_special_token(token, tokenizer)
+    add_and_init_special_tokens(ENV_SPECIAL_TOKENS, tokenizer)
     vocab = tokenizer.get_vocab()
 
     # Create environment
-    env = InteractivePythonEnv(tokenizer, vocab)
+    env = InteractivePythonEnv(tokenizer)
 
     # Define start and end code snippets
     start_code = """def bubble_sort(arr):

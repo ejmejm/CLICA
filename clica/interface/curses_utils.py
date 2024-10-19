@@ -1,3 +1,4 @@
+import contextlib
 import curses
 from curses.textpad import Textbox
 from typing import Optional, Union, List, Tuple
@@ -218,3 +219,14 @@ def select_multiple_from_list(stdscr: curses.window, items: List[str], title: st
             cursor_index = (cursor_index - 1) % len(items)
         elif key == curses.KEY_DOWN:
             cursor_index = (cursor_index + 1) % len(items)
+
+
+@contextlib.contextmanager
+def shell_mode():
+    """A context manager that switches to shell mode and back."""
+    try:
+        curses.savetty()
+        curses.reset_shell_mode()
+        yield
+    finally:
+        curses.resetty()

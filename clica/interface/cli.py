@@ -204,7 +204,7 @@ def test_cli(config: DictConfig):
     
     # Add special tokens
     for token in ENV_SPECIAL_TOKENS:
-      add_and_init_special_token(token, tokenizer)
+      add_and_init_special_tokens(token, tokenizer)
 
     vocab = tokenizer.get_vocab()
     
