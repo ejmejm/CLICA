@@ -17,6 +17,7 @@ class BufferedMultiSequenceIterator(_SingleProcessDataLoaderIter):
         self._dataset_fetcher.collate_fn = lambda x: x
         self.sequence_buffer = [{} for _ in range(dataloader.batch_size)]
         self.final_sequence_loaded = False
+        self.dataset_keys = dataloader.dataset.column_names
 
     def _fill_sequence_buffer_if_empty(self):
         if self.final_sequence_loaded:
@@ -40,25 +41,33 @@ class BufferedMultiSequenceIterator(_SingleProcessDataLoaderIter):
     def _next_data(self):
         self._fill_sequence_buffer_if_empty()
         batch = []
+        sample_count = 0
         for i in range(len(self.sequence_buffer)):
             # First check if the sequence buffer is empty
             if not self.sequence_buffer[i]:
+                # Need to append an empty sequence ensure the batch size is consistent
+                # And each separate sequence stays at the same index
+                batch.append({k: [] for k in self.dataset_keys})
                 continue
             
             # If not empty, add the first item to the batch
             batch.append({k: v.pop(0) for k, v in self.sequence_buffer[i].items()})
-            
+            sample_count += 1
+            # TODO: Eventually, when we get to recurrent models, we will need to return
+            #       something that indicates the end of the sequence
             # Reset the buffer to empty if the sequence is exhausted
-            first_key = list(self.sequence_buffer[i].keys())[0]
+            first_key = self.dataset_keys[0]
             if len(self.sequence_buffer[i][first_key]) == 0:
                 self.sequence_buffer[i] = {}
 
-        if len(batch) == 0:
+        if sample_count == 0:
             raise StopIteration
 
         return self._collate_fn(batch)
 
 
+# Note that this dataloader does not work with Accelerate.
+# It will not throw an error, but it will not load the data correctly.
 class MultiSequenceDataloader(DataLoader):
     def __init__(self, *args, **kwargs):
         if 'batch_sampler' in kwargs:

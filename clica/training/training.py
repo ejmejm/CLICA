@@ -1,9 +1,7 @@
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from dataclasses import dataclass
 
-from accelerate import Accelerator
 from datasets import Dataset
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -11,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from transformers import PreTrainedTokenizer, Trainer, TrainingArguments
 
-from clica.code_env import COMMAND_TOKENS, KEY_ENTER_TOKEN, InteractivePythonEnv
+from clica.code_env import COMMAND_TOKENS, InteractivePythonEnv
 from clica.database import ActionType
 from clica.training.trainer import MultiSequenceDataloader, MultiSequenceDataset
 
@@ -29,16 +27,16 @@ class DataCollatorForSupervisedDataset(object):
         input_ids, labels = tuple(
             [instance[key] for instance in instances] for key in ('input_ids', 'labels'))
 
-        input_ids = [torch.tensor(x) for x in input_ids]
+        input_ids = [torch.tensor(x, dtype=torch.long) for x in input_ids]
         input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
-        labels = [torch.tensor(x) for x in labels]
+        labels = [torch.tensor(x, dtype=torch.long) for x in labels]
         labels = pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
 
         return dict(
             input_ids = input_ids,
             labels = labels,
-            attention_mask = input_ids.ne(self.tokenizer.pad_token_id), # TODO: Is this not also checking for IGNORE_INDEX a bug?
+            attention_mask = input_ids.ne(self.tokenizer.pad_token_id), # TODO: This may be a problem because when pad = eos token, the final eos token may not be trained on. Check this.
         )
 
 
@@ -132,10 +130,9 @@ def train_on_sessions(
         tokenizer: The tokenizer to use.
         sessions: A list of dictionaries, each containing session data.
     """
+    device = next(model.parameters()).device
+    
     all_sequences = [create_session_dataset(session, tokenizer) for session in sessions.values()]
-    # TODO: Dataset must be a list of dictionaries. To do this, we can flatten all_sequences,
-    # but then also store the indices of the starts of each sequence. When we sample, we can sample
-    # just from those indices, and then grab data from there to the end of the sequence.
     dataset = MultiSequenceDataset.from_nested_list(all_sequences)
 
     dataloader = MultiSequenceDataloader(
@@ -159,32 +156,35 @@ def train_on_sessions(
     )
     scheduler = CosineAnnealingLR(optimizer, T_max=n_train_epochs * batches_per_epoch)
 
-    accelerator = Accelerator(
-        gradient_accumulation_steps = gradient_accumulation_steps,
-    )
-    dataloader, model, optimizer, scheduler = accelerator.prepare(
-        dataloader, model, optimizer, scheduler)
-    
     recurrent_states = [None for _ in range(batch_size)]
 
     curr_iter = 0
     for epoch_idx in range(n_train_epochs):
         for batch_idx, train_batch in enumerate(dataloader):
-            with accelerator.accumulate(model):
-                # TODO: Don't forget to use the recurrent states here in the future
-                outputs = model(input_ids=train_batch['input_ids'], attention_mask=train_batch['attention_mask'])
-                loss = calculate_loss(outputs.logits, train_batch['labels'])
-                
-                accelerator.backward(loss)
+            # TODO: Don't forget to use the recurrent states here in the future
+            train_batch = {k: v.to(device) for k, v in train_batch.items()}
+            outputs = model(input_ids=train_batch['input_ids'], attention_mask=train_batch['attention_mask'])
+
+            loss = calculate_loss(outputs.logits, train_batch['labels'])
+            loss = loss / gradient_accumulation_steps
+            loss.backward()
+
+            if (batch_idx + 1) % gradient_accumulation_steps == 0:
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
+
             curr_iter += 1
 
             if batch_idx % logging_steps == 0:
-                # total_batches = n_train_epochs * batches_per_epoch
                 current_epoch = epoch_idx + (batch_idx + 1) / batches_per_epoch
                 print(f'Epoch {current_epoch:.2f}, Iter {curr_iter}: Training loss: {loss.item():.4f}')
+        
+        # Step the optimizer after the epoch if the last step was not a gradient accumulation step
+        if (batch_idx + 1) % gradient_accumulation_steps != 0:
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
 
     torch.cuda.empty_cache()
 
