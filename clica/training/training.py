@@ -2,7 +2,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from dataclasses import dataclass
 
 from accelerate import Accelerator
-from datasets import Dataset, IterableDataset
+from datasets import Dataset
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -12,7 +13,7 @@ from transformers import PreTrainedTokenizer, Trainer, TrainingArguments
 
 from clica.code_env import COMMAND_TOKENS, KEY_ENTER_TOKEN, InteractivePythonEnv
 from clica.database import ActionType
-from clica.training.trainer import SequentialDataloader
+from clica.training.trainer import MultiSequenceDataloader, MultiSequenceDataset
 
 
 IGNORE_INDEX = -100
@@ -135,10 +136,9 @@ def train_on_sessions(
     # TODO: Dataset must be a list of dictionaries. To do this, we can flatten all_sequences,
     # but then also store the indices of the starts of each sequence. When we sample, we can sample
     # just from those indices, and then grab data from there to the end of the sequence.
-    dataset = Dataset.from_list(all_sequences)
-    # dataset = IterableDataset(dataset)
+    dataset = MultiSequenceDataset.from_nested_list(all_sequences)
 
-    dataloader = SequentialDataloader(
+    dataloader = MultiSequenceDataloader(
         dataset,
         batch_size = 4,
         shuffle = True,

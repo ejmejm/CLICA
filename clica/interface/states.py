@@ -303,7 +303,7 @@ class TrainState(CLIState):
         cli.stdscr.clear()
         cli.stdscr.refresh()
 
-        training_options = ['Train on recent actions', 'Train on all verified sessions']
+        training_options = ['Train on all verified sessions', 'Train on recent actions']
         option, option_idx = select_from_list(cli.stdscr, training_options, 'Select training option:')
 
         if not option:
@@ -313,14 +313,14 @@ class TrainState(CLIState):
         cli.stdscr.refresh()
 
         with shell_mode():
-            if option == 'Train on recent actions':
-                TrainState.train_on_recent_actions(cli)
-            elif option == 'Train on all verified sessions':
+            if option == 'Train on all verified sessions':
                 TrainState.train_on_all_verified_sessions(cli)
+            elif option == 'Train on recent actions':
+                TrainState.train_on_recent_actions(cli)
+                
+            print('\n\n' + '=' * 40)
+            print("\nTraining complete, press any key to return to the menu...")
 
-        cli.stdscr.clear()
-        cli.stdscr.addstr(0, 0, "Training complete, press any key to return to the menu...")
-        cli.stdscr.refresh()
         cli.stdscr.getch()
         return MenuState
         
