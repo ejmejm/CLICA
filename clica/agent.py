@@ -152,9 +152,10 @@ class TransformerAgent(BaseAgent):
             outputs = self.model.generate(
                 input_ids = input_ids.unsqueeze(0),
                 max_new_tokens = self.max_gen_length,
-                temperature = 0.7,
-                do_sample = True,
-                top_k = 5,
+                do_sample = False,
+                # temperature = 0.7,
+                # do_sample = True,
+                # top_k = 5,
                 stopping_criteria = self.stopping_criteria,
             )
 

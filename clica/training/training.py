@@ -133,6 +133,7 @@ def train_on_sessions(
     device = next(model.parameters()).device
     
     all_sequences = [create_session_dataset(session, tokenizer) for session in sessions.values()]
+    max_sequence_length = max([len(seq) for seq in all_sequences])
     dataset = MultiSequenceDataset.from_nested_list(all_sequences)
 
     dataloader = MultiSequenceDataloader(
@@ -148,13 +149,16 @@ def train_on_sessions(
     gradient_accumulation_steps = 1
     
     n_samples = sum([len(seq) for seq in all_sequences])
-    batches_per_epoch = n_samples // batch_size
+    max_batches_per_epoch = n_samples // batch_size + max_sequence_length
+    max_updates_per_epoch = max_batches_per_epoch // gradient_accumulation_steps
 
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr = 5e-5,
     )
-    scheduler = CosineAnnealingLR(optimizer, T_max=n_train_epochs * batches_per_epoch)
+    scheduler = CosineAnnealingLR(optimizer, T_max=n_train_epochs * max_updates_per_epoch)
+    
+    # scheduler._last_lr
 
     recurrent_states = [None for _ in range(batch_size)]
 
@@ -169,19 +173,18 @@ def train_on_sessions(
             loss = loss / gradient_accumulation_steps
             loss.backward()
 
-            if (batch_idx + 1) % gradient_accumulation_steps == 0:
+            curr_iter += 1
+            if curr_iter % gradient_accumulation_steps == 0:
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
 
-            curr_iter += 1
-
             if batch_idx % logging_steps == 0:
-                current_epoch = epoch_idx + (batch_idx + 1) / batches_per_epoch
+                current_epoch = epoch_idx + (batch_idx + 1) / max_batches_per_epoch
                 print(f'Epoch {current_epoch:.2f}, Iter {curr_iter}: Training loss: {loss.item():.4f}')
         
         # Step the optimizer after the epoch if the last step was not a gradient accumulation step
-        if (batch_idx + 1) % gradient_accumulation_steps != 0:
+        if curr_iter % gradient_accumulation_steps != 0:
             optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
