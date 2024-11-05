@@ -349,7 +349,7 @@ class TrainState(CLIState):
         session_data = cli.db.get_all_verified_session_data()
         if not session_data:
             return
-        cli.agent.train_on_sessions(session_data)
+        cli.agent.train_on_sessions(session_data, cli.train_config)
 
 
 class SaveModelState(CLIState):

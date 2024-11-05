@@ -2,3 +2,11 @@ model_name: "meta-llama/Llama-3.2-1B" # "deepseek-ai/deepseek-coder-1.3b-instruc
 device: cuda
 model_save_dir: ./models
 eval_data_path: ./data/eval
+
+train:
+  n_train_epochs: 2
+  batch_size: 4
+  logging_steps: 10
+  gradient_accumulation_steps: 2
+  learning_rate: 0.00005 # 5e-5
+  max_grad_norm: 1.0

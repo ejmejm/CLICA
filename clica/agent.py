@@ -167,14 +167,15 @@ class TransformerAgent(BaseAgent):
     def reset_action_queue(self):
         self.action_queue = []
 
-    def train_on_sessions(self, sessions: List[Dict[str, Any]]):
+    def train_on_sessions(self, sessions: List[Dict[str, Any]], train_config: Dict[str, Any]):
         """
         Trains the agent on multiple sequences of actions from different sessions.
 
         Args:
             sessions: A list of dictionaries, each containing session data.
+            train_config: A dictionary containing vars for training.
         """
-        self.model = train_on_sessions(self.model, self.tokenizer, sessions)
+        self.model = train_on_sessions(self.model, self.tokenizer, sessions, train_config)
 
     def train_on_actions(self, env, actions: List[Tuple[int, str, str, Optional[bool]]]):
         """

@@ -30,6 +30,7 @@ class InteractiveCLI():
             db_path: Optional[str] = 'data/interactions.db',
             model_save_dir: Optional[str] = None,
             eval_data_path: Optional[str] = None,
+            train_config: Optional[dict] = None,
         ):
         """Initializes the interactive CLI.
 
@@ -40,6 +41,7 @@ class InteractiveCLI():
         self.agent = agent
         self.supervised_train_mode = supervised_train_mode
         self.eval_data_path = eval_data_path
+        self.train_config = train_config or {}
 
         env_kwargs = env_kwargs or {}
         self.env = make_env(**env_kwargs)
@@ -224,6 +226,7 @@ def test_cli(config: DictConfig):
             tokenizer = agent.tokenizer,
             vocab = vocab,
         ),
+        train_config = config.get('train', {}),
     )
     cli.run()
 

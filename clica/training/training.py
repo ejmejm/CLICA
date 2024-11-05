@@ -17,6 +17,15 @@ from clica.training.trainer import MultiSequenceDataloader, MultiSequenceDataset
 IGNORE_INDEX = -100
 EOS_TOKENS = {'<|EOS|>', '<|end_of_sentence|>', '<|end_of_text|>'}
 
+DEFAULT_TRAIN_CONFIG = {
+    'n_train_epochs': 20,
+    'batch_size': 4,
+    'logging_steps': 10,
+    'gradient_accumulation_steps': 1,
+    'learning_rate': 5e-5,
+    'max_grad_norm': 1.0,
+}
+
 
 @dataclass
 class DataCollatorForSupervisedDataset(object):
@@ -121,6 +130,7 @@ def train_on_sessions(
     model: nn.Module,
     tokenizer: PreTrainedTokenizer,
     sessions: List[Dict[str, Any]],
+    train_config: Dict[str, Any],
 ):
     """
     Trains the agent on multiple sequences of actions from different sessions.
@@ -129,7 +139,11 @@ def train_on_sessions(
         model: The model to train.
         tokenizer: The tokenizer to use.
         sessions: A list of dictionaries, each containing session data.
+        train_config: A dictionary containing training configuration.
     """
+    def get_config_value(key):
+        return train_config.get(key, DEFAULT_TRAIN_CONFIG[key])
+    
     device = next(model.parameters()).device
     
     all_sequences = [create_session_dataset(session, tokenizer) for session in sessions.values()]
@@ -138,27 +152,25 @@ def train_on_sessions(
 
     dataloader = MultiSequenceDataloader(
         dataset,
-        batch_size = 4,
+        batch_size = get_config_value('batch_size'),
         shuffle = True,
         collate_fn = DataCollatorForSupervisedDataset(tokenizer),
     )
 
-    n_train_epochs = 2
-    batch_size = 4
-    logging_steps = 10
-    gradient_accumulation_steps = 1
+    n_train_epochs = get_config_value('n_train_epochs')
+    batch_size = get_config_value('batch_size')
+    logging_steps = get_config_value('logging_steps')
+    gradient_accumulation_steps = get_config_value('gradient_accumulation_steps')
+    max_grad_norm = get_config_value('max_grad_norm')
     
     n_samples = sum([len(seq) for seq in all_sequences])
     max_batches_per_epoch = n_samples // batch_size + max_sequence_length
-    max_updates_per_epoch = max_batches_per_epoch // gradient_accumulation_steps
+    # max_updates_per_epoch = max_batches_per_epoch // gradient_accumulation_steps
 
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr = 5e-5,
+        lr = get_config_value('learning_rate'),
     )
-    scheduler = CosineAnnealingLR(optimizer, T_max=n_train_epochs * max_updates_per_epoch)
-    
-    # scheduler._last_lr
 
     recurrent_states = [None for _ in range(batch_size)]
     losses = []
@@ -174,11 +186,12 @@ def train_on_sessions(
             loss = loss / gradient_accumulation_steps
             loss.backward()
             losses.append(loss.item())
+            
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
 
             curr_iter += 1
             if curr_iter % gradient_accumulation_steps == 0:
                 optimizer.step()
-                scheduler.step()
                 optimizer.zero_grad()
 
             if curr_iter % logging_steps == 0:
@@ -190,7 +203,6 @@ def train_on_sessions(
         # Step the optimizer after the epoch if the last step was not a gradient accumulation step
         if curr_iter % gradient_accumulation_steps != 0:
             optimizer.step()
-            scheduler.step()
             optimizer.zero_grad()
 
     if curr_iter % logging_steps != 0:

@@ -39,6 +39,7 @@ def run_cli(config: DictConfig):
         make_env = InteractivePythonEnv,
         model_save_dir = config.model_save_dir,
         env_kwargs = dict(tokenizer=agent.tokenizer),
+        train_config = config.get('train', {}),
     )
 
     cli.run()
