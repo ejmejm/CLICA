@@ -136,7 +136,7 @@ class TransformerAgent(BaseAgent):
         super().__init__(model, tokenizer, max_gen_length)
         
         self.stop_token_ids = set([
-            self.tokenizer.encode(token)[0]
+            self.tokenizer.encode(token, add_special_tokens=False)[0]
             for token in COMMAND_TOKENS.union({self.tokenizer.eos_token})
         ])
         self.stopping_criteria = StoppingCriteriaList([StopOnTokens(self.stop_token_ids)])
