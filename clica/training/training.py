@@ -15,7 +15,7 @@ from clica.training.trainer import MultiSequenceDataloader, MultiSequenceDataset
 
 
 IGNORE_INDEX = -100
-EOS_TOKENS = {'<|EOS|>', '<|end_of_sentence|>'}
+EOS_TOKENS = {'<|EOS|>', '<|end_of_sentence|>', '<|end_of_text|>'}
 
 
 @dataclass
@@ -161,6 +161,7 @@ def train_on_sessions(
     # scheduler._last_lr
 
     recurrent_states = [None for _ in range(batch_size)]
+    losses = []
 
     curr_iter = 0
     for epoch_idx in range(n_train_epochs):
@@ -172,6 +173,7 @@ def train_on_sessions(
             loss = calculate_loss(outputs.logits, train_batch['labels'])
             loss = loss / gradient_accumulation_steps
             loss.backward()
+            losses.append(loss.item())
 
             curr_iter += 1
             if curr_iter % gradient_accumulation_steps == 0:
@@ -179,15 +181,22 @@ def train_on_sessions(
                 scheduler.step()
                 optimizer.zero_grad()
 
-            if batch_idx % logging_steps == 0:
+            if curr_iter % logging_steps == 0:
                 current_epoch = epoch_idx + (batch_idx + 1) / max_batches_per_epoch
-                print(f'Epoch {current_epoch:.2f}, Iter {curr_iter}: Training loss: {loss.item():.4f}')
+                avg_loss = sum(losses) / len(losses)
+                print(f'Epoch {current_epoch:.2f}, Iter {curr_iter}: Training loss: {avg_loss:.4f}')
+                losses = []
         
         # Step the optimizer after the epoch if the last step was not a gradient accumulation step
         if curr_iter % gradient_accumulation_steps != 0:
             optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
+
+    if curr_iter % logging_steps != 0:
+        avg_loss = sum(losses) / len(losses)
+        print(f'Epoch {n_train_epochs}, Iter {curr_iter}: Training loss: {avg_loss:.4f}')
+        losses = []
 
     torch.cuda.empty_cache()
 
