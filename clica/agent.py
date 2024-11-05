@@ -34,7 +34,7 @@ class StopOnTokens(StoppingCriteria):
         self.stop_tokens = stop_tokens
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor, **kwargs) -> bool:
-        if input_ids[0][-1] in self.stop_tokens:
+        if input_ids[0][-1].item() in self.stop_tokens:
             return True
         return False
 
