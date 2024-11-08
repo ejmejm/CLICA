@@ -131,6 +131,7 @@ def train_on_sessions(
     tokenizer: PreTrainedTokenizer,
     sessions: List[Dict[str, Any]],
     train_config: Dict[str, Any],
+    optimizer: Optional[torch.optim.Optimizer] = None,
 ):
     """
     Trains the agent on multiple sequences of actions from different sessions.
@@ -167,7 +168,7 @@ def train_on_sessions(
     max_batches_per_epoch = n_samples // batch_size + max_sequence_length
     # max_updates_per_epoch = max_batches_per_epoch // gradient_accumulation_steps
 
-    optimizer = torch.optim.Adam(
+    optimizer = optimizer or torch.optim.Adam(
         model.parameters(),
         lr = get_config_value('learning_rate'),
     )
@@ -212,7 +213,7 @@ def train_on_sessions(
 
     torch.cuda.empty_cache()
 
-    return model
+    return model, optimizer
 
 
 def train_on_actions(model, tokenizer, env, actions: List[Tuple[int, str, str, Optional[bool]]]):

@@ -134,6 +134,7 @@ class TransformerAgent(BaseAgent):
     def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, max_gen_length: int = 128):
         """Initialize the agent."""
         super().__init__(model, tokenizer, max_gen_length)
+        self.optimizer = None
         
         self.stop_token_ids = set([
             self.tokenizer.encode(token, add_special_tokens=False)[0]
@@ -153,9 +154,9 @@ class TransformerAgent(BaseAgent):
                 input_ids = input_ids.unsqueeze(0),
                 max_new_tokens = self.max_gen_length,
                 do_sample = False,
-                # temperature = 0.7,
-                # do_sample = True,
-                # top_k = 5,
+                temperature = 0.7,
+                do_sample = True,
+                top_k = 5,
                 stopping_criteria = self.stopping_criteria,
             )
 
@@ -175,7 +176,10 @@ class TransformerAgent(BaseAgent):
             sessions: A list of dictionaries, each containing session data.
             train_config: A dictionary containing vars for training.
         """
-        self.model = train_on_sessions(self.model, self.tokenizer, sessions, train_config)
+        self.model, self.optimizer = train_on_sessions(
+            self.model, self.tokenizer, sessions, train_config,
+            optimizer=self.optimizer,
+        )
 
     def train_on_actions(self, env, actions: List[Tuple[int, str, str, Optional[bool]]]):
         """
